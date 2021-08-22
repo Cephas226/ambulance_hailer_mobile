@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "723964803921",
+    "project_id": "ambulancehailer",
+    "storage_bucket": "ambulancehailer.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:723964803921:android:1659cf35eee6b995e57170",
+        "android_client_info": {
+          "package_name": "com.example.ambulancehailer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "723964803921-dcsttl5lpbfvnp82as2fiabee9vr8jn0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAgg0BqaRBmZursYz81mMAPcrM7RD6o4f0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "723964803921-dcsttl5lpbfvnp82as2fiabee9vr8jn0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
