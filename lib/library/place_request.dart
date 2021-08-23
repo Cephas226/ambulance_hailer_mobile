@@ -115,17 +115,17 @@ class PlaceApiProvider {
   }
 }
 
-const apiKey = "AIzaSyBhDflq5iJrXIcKpeq0IzLQPQpOboX91lY";
+const apiKey = "AIzaSyAtzQc5uOLC9UcrPka0QHCsrpxx7Chxl0A";
 
 class GoogleMapsServices{
-  Future<String> getRouteCoordinates(LatLng l1, LatLng l2)async{
+  static  Future<String> getRouteCoordinates(LatLng l1, LatLng l2)async{
     String url = "https://maps.googleapis.com/maps/api/directions/json?origin=${l1.latitude},${l1.longitude}&destination=${l2.latitude},${l2.longitude}&key=$apiKey";
     http.Response response = await http.get(url);
     Map values = jsonDecode(response.body);
     return values["routes"][0]["overview_polyline"]["points"];
 
   }
-  Future<RouteModel> getRouteByCoordinates(LatLng l1, LatLng l2) async {
+  static Future<RouteModel> getRouteByCoordinates(LatLng l1, LatLng l2) async {
     String url =
         "https://maps.googleapis.com/maps/api/directions/json?origin=${l1.latitude},${l1.longitude}&destination=${l2.latitude},${l2.longitude}&key=$apiKey";
     http.Response response = await http.get(url);

@@ -1,3 +1,4 @@
+import 'package:ambulance_hailer/assistant/assistantMethods.dart';
 import 'package:ambulance_hailer/driver/driver_screen/newRideScreen.dart';
 import 'package:ambulance_hailer/main.dart';
 import 'package:ambulance_hailer/models/rideDetails.dart';
@@ -107,6 +108,7 @@ class NotificationDialog extends StatelessWidget{
       }
       if(theRideId == rideDetails.ride_request_id){
           rideRequestRef.set("accepted");
+          AssistantMethods.disableHomeDriveLiveLocationUpdates();
           Get.to(NewRidePage(rideDetails: rideDetails));
       }
       else if (theRideId == "canceled"){

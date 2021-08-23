@@ -34,7 +34,7 @@ class _HomePageState extends State<HomePage> {
   Set<Marker> markerSet = new Set();
   HomeController hController = Get.put(HomeController());
   String _placeDistance;
-  CameraPosition initialLocation = CameraPosition(target: LatLng(0.0, 0.0));
+  CameraPosition initialLocation = CameraPosition(target: LatLng(33.609434051916494, -7.623460799015407),zoom: 14.4746);
   List<LatLng> polylineCoordinates = [];
   Map<PolylineId, Polyline> polylines = {};
   LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void saveRideRequest() async {
-   rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
     List<Location> startPlacemark = await locationFromAddress(startAddress);
     List<Location> destinationPlacemark = await locationFromAddress(destinationAddress);
 
@@ -569,7 +569,7 @@ class _HomePageState extends State<HomePage> {
                                                                         isScrollControlled: true,
                                                                         context: context,
                                                                         builder: (context) {
-                                                                         return Align(
+                                                                          return Align(
                                                                             alignment: Alignment.bottomCenter,
                                                                             child:
                                                                             Container(
@@ -782,7 +782,7 @@ class _HomePageState extends State<HomePage> {
     Geofire.initialize("availableDriver");
 
     Geofire.queryAtLocation(currentPosition.latitude, -7.623460799015407, 100).listen((map) {
-          if (map["key"] != null) {
+      if (map["key"] != null) {
         var callBack = map['callBack'];
         switch (callBack) {
           case Geofire.onKeyEntered:
@@ -796,8 +796,8 @@ class _HomePageState extends State<HomePage> {
             break;
 
           case Geofire.onKeyExited:
-             GeoFireAssistant.removeFromList(map["key"]);
-             updateAvailableDriverOnMap();
+            GeoFireAssistant.removeFromList(map["key"]);
+            updateAvailableDriverOnMap();
             break;
 
           case Geofire.onKeyMoved:
@@ -810,7 +810,7 @@ class _HomePageState extends State<HomePage> {
             break;
 
           case Geofire.onGeoQueryReady:
-             updateAvailableDriverOnMap();
+            updateAvailableDriverOnMap();
             break;
         }
       }
@@ -827,10 +827,10 @@ class _HomePageState extends State<HomePage> {
     for(NearbyAvailableDrivers drivers in GeoFireAssistant.nearbyAvailableList){
       LatLng driverAvailablePosition = LatLng(drivers.latitude,drivers.longitude);
       Marker marker = Marker(
-        markerId: MarkerId("driver${drivers.key}"),
-        position: driverAvailablePosition,
-        icon:nearByIcon,
-        rotation :AssistantMethods.createRadomNumber(60)
+          markerId: MarkerId("driver${drivers.key}"),
+          position: driverAvailablePosition,
+          icon:nearByIcon,
+          rotation :AssistantMethods.createRadomNumber(60)
       );
       print(markers);
       tMarkers.add(marker);
@@ -844,11 +844,11 @@ class _HomePageState extends State<HomePage> {
   void createIconMarker(){
     if (nearByIcon==null){
       ImageConfiguration imageConfiguration = createLocalImageConfiguration(context,size:Size( 2, 2));
-      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/ambulancecar.png")
-      .then((value){
-          nearByIcon = value;
+      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/car_driving.png")
+          .then((value){
+        nearByIcon = value;
       })
-    ;
+      ;
     }
   }
 }
