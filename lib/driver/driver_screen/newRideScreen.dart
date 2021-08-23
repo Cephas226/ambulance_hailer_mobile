@@ -2,8 +2,11 @@
   import 'dart:convert';
 import 'dart:math';
 
-  import 'package:ambulance_hailer/driver/home_driver/home_driver_page.dart';
+  import 'package:ambulance_hailer/assistant/assistantMethods.dart';
+import 'package:ambulance_hailer/assistant/mapKitAssistant.dart';
+import 'package:ambulance_hailer/driver/home_driver/home_driver_page.dart';
   import 'package:ambulance_hailer/library/configMaps.dart';
+import 'package:ambulance_hailer/library/place_request.dart';
 import 'package:ambulance_hailer/main.dart';
   import 'package:ambulance_hailer/models/rideDetails.dart';
   import 'package:ambulance_hailer/pages/authentification/login.dart';
@@ -45,6 +48,9 @@ import 'package:geolocator/geolocator.dart';
     double mapPaddingFromBottom = 0;
     Position myPosition;
     BitmapDescriptor animatingMarerIcon;
+    String status = "accepted";
+    String durationRide ="";
+    bool isResquestingDirection = false;
     static final CameraPosition _kGooglePlex = CameraPosition(
         target: LatLng(33.609434051916494, -7.623460799015407), zoom: 14.4746);
 
@@ -106,7 +112,7 @@ import 'package:geolocator/geolocator.dart';
                       child:
                       Column(
                         children: [
-                          Text("10mins", style: TextStyle(
+                          Text(durationRide, style: TextStyle(
                               fontSize: 14.0, color: Colors.deepPurple),),
                           SizedBox(height: 6.0,),
                           Row(mainAxisAlignment: MainAxisAlignment.center,
@@ -200,7 +206,7 @@ import 'package:geolocator/geolocator.dart';
       } else {
         print(result.errorMessage);
       }
-      _addMarker(pickUpLatLng, "pickUpId", BitmapDescriptor.defaultMarker);
+     // _addMarker(pickUpLatLng, "pickUpId", BitmapDescriptor.defaultMarker);
       _addMarker(dropOffLatLng, "dropOffUpId", BitmapDescriptor.defaultMarker);
       _addPolyLine(polylineCoordinates);
 
@@ -271,16 +277,21 @@ import 'package:geolocator/geolocator.dart';
       }
     }
     void getRideLiveLocationUpdates() {
+      LatLng oldPos = LatLng(0, 0);
       rideStreamSubcription =
           Geolocator.getPositionStream().listen((Position position) async {
             currentPosition = position;
             myPosition = position;
             LatLng mPositon = LatLng(position.latitude, position.longitude);
+
+            var rot = MapKitAssistant.getMarkerRotation(oldPos.latitude, oldPos.longitude, mPositon.latitude, mPositon.longitude);
+
             Marker animatingMarker =
             Marker (
                 markerId: MarkerId("animating"),
                 position: mPositon,
                 icon: animatingMarerIcon,
+                rotation : rot,
                 infoWindow: InfoWindow(title: "Current Location")
             );
             setState(() {
@@ -290,6 +301,41 @@ import 'package:geolocator/geolocator.dart';
               markersSet.removeWhere((mark) => mark.markerId.value == "animating");
               markersSet.add(animatingMarker);
             });
+            oldPos = mPositon;
+            updateRideDetails();
+            String rideRequestId = widget.rideDetails.ride_request_id;
+            Map locMap = {
+              "latitude": currentPosition.latitude.toString(),
+              "longitude": currentPosition.longitude.toString()};
+            newRequestRef.child(rideRequestId).child("driver_location").set(locMap);
           });
+    }
+    void updateRideDetails()async
+    {
+      if (isResquestingDirection==false)
+      {
+        isResquestingDirection = true;
+        if (myPosition==null){
+          return;
+        }
+        var postLatLng = LatLng(myPosition.latitude, myPosition.longitude);
+        LatLng destinationLng;
+        if(status=="accepted")
+        {
+          destinationLng = widget.rideDetails.pickup;
+        }
+        else
+        {
+          destinationLng = widget.rideDetails.drop;
+        }
+        var directionDetails = await AssistantMethods.obtainPlaceDirectionDetails (postLatLng,destinationLng);
+        if (directionDetails!=null)
+        {
+          setState(() {
+            durationRide = directionDetails.durationText;
+          });
+        }
+        isResquestingDirection =false;
+      }
     }
   }
