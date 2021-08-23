@@ -2,7 +2,8 @@
   import 'dart:convert';
 import 'dart:math';
 
-  import 'package:ambulance_hailer/assistant/assistantMethods.dart';
+  import 'package:ambulance_hailer/allWidget/collectFareDialog.dart';
+import 'package:ambulance_hailer/assistant/assistantMethods.dart';
 import 'package:ambulance_hailer/assistant/mapKitAssistant.dart';
 import 'package:ambulance_hailer/driver/home_driver/home_driver_page.dart';
   import 'package:ambulance_hailer/library/configMaps.dart';
@@ -13,6 +14,7 @@ import 'package:ambulance_hailer/main.dart';
   import 'package:ambulance_hailer/pages/home/home_page.dart';
   import 'package:bubble_bottom_bar/bubble_bottom_bar.dart';
   import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
   import 'package:flutter/cupertino.dart';
   import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
@@ -121,7 +123,7 @@ import 'package:geolocator/geolocator.dart';
                           SizedBox(height: 6.0,),
                           Row(mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text("Cephas ZOUBGA"),
+                              Text(widget.rideDetails.rider_name),
                               Padding(padding: EdgeInsets.only(right: 10.0),
                                 child: Icon(Icons.phone_android),
                               )
@@ -133,7 +135,7 @@ import 'package:geolocator/geolocator.dart';
                               Image.asset(
                                   "images/car.png", height: 16.0, width: 16.0),
                               Expanded(child: Container(child: Text(
-                                "Street##4,Casablanca",
+                                widget.rideDetails.pick_address,
                                 overflow: TextOverflow.ellipsis,
                               ),))
                             ],
@@ -144,7 +146,7 @@ import 'package:geolocator/geolocator.dart';
                               Image.asset(
                                   "images/car.png", height: 16.0, width: 16.0),
                               Expanded(child: Container(child: Text(
-                                "Street##4,Casablanca",
+                                widget.rideDetails.drop_address,
                                 overflow: TextOverflow.ellipsis,
                               ),))
                             ],
@@ -218,7 +220,6 @@ import 'package:geolocator/geolocator.dart';
       polylines[id] = polyline;
       setState(() {});
     }
-
     void _getPolyline(LatLng pickUpLatLng, LatLng dropOffLatLng) async {
       List<LatLng> polylineCoordinates = [];
 
@@ -272,6 +273,7 @@ import 'package:geolocator/geolocator.dart';
         ),
       );
     }
+
     void acceptRideRequest() {
       String rideRequestId = widget.rideDetails.ride_request_id;
       print(driversInformation);
@@ -289,6 +291,10 @@ import 'package:geolocator/geolocator.dart';
         "latitude": currentPosition.latitude.toString(),
         "longitude": currentPosition.longitude.toString()};
       newRequestRef.child(rideRequestId).child("driver_location").set(locMap);
+
+      driversRef.child(currentfirebaseDriver.uid).child("history")
+          .child(rideRequestId)
+          .set(true);
     }
     void createIconMarker() {
       if (animatingMarerIcon == null) {
@@ -379,12 +385,31 @@ import 'package:geolocator/geolocator.dart';
 
       String rideRequestId = widget.rideDetails.ride_request_id;
       newRequestRef.child(rideRequestId)
-      .child("fares")
+      .child(" fares")
       .set(fareAmount.toString());
 
       newRequestRef.child(rideRequestId)
       .child("status")
       .set("ended");
       rideStreamSubcription.cancel();
+      showDialog(context: context, builder: (BuildContext context )=>CollectFareDialog(paymentMethod:widget.rideDetails.payment_method, fareAmount:fareAmount));
+      saveEarning(fareAmount);
+    }
+    void saveEarning(int fareAmount)
+    {
+       driversRef.child(currentfirebaseDriver.uid).child("earnings").once().then((DataSnapshot dataSnapshot)
+       {
+         if (dataSnapshot.value !=null)
+         {
+           double oldEarnings = double.parse(dataSnapshot.value.toString());
+           double totalEarnings = fareAmount + oldEarnings;
+
+           driversRef.child(currentfirebaseDriver.uid).child("earnings").set(totalEarnings.toStringAsFixed(2));
+         }
+         else {
+           double totalEarnings = fareAmount.toDouble();
+           driversRef.child(currentfirebaseDriver.uid).child("earnings").set(totalEarnings.toStringAsFixed(2));
+         }
+       });
     }
   }

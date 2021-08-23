@@ -51,12 +51,22 @@ class PushNotificationService{
         double dropLocationLong = double.parse(dataSnapshot.value['drop']['longitude'].toString());
         String dropAddress =dataSnapshot.value['dropoff_address'].toString();
 
-        RideDetails rideDetails  = RideDetails(null,null, null, null, null, null, null);
+        String payementMethod = dataSnapshot.value["payment_method"].toString();
+        String rider_name = dataSnapshot.value["rider_name"];
+        String rider_phone = dataSnapshot.value["rider_phone"];
+
+
+
+
+        RideDetails rideDetails  = RideDetails(null,null, null, null, null, null, null,"");
         rideDetails.ride_request_id =rideRequestId;
         rideDetails.pick_address = pickupAddress;
         rideDetails.drop_address = dropAddress;
         rideDetails.pickup = LatLng(pickupLocationLat, pickupLocationLong);
         rideDetails.drop = LatLng(dropLocationLat, dropLocationLong);
+        rideDetails.payment_method =payementMethod;
+        rideDetails.rider_name =rider_name;
+        rideDetails.rider_phone = rider_phone;
 
         print('Information ::');
         print(rideDetails.pick_address);

@@ -34,7 +34,7 @@ class _HomePageState extends State<HomePage> {
   Set<Marker> markerSet = new Set();
   HomeController hController = Get.put(HomeController());
   String _placeDistance;
-  CameraPosition initialLocation = CameraPosition(target: LatLng(33.609434051916494, -7.623460799015407),zoom: 14.4746);
+  CameraPosition initialLocation = CameraPosition(target:  LatLng(33.609434051916494, -7.623460799015407));
   List<LatLng> polylineCoordinates = [];
   Map<PolylineId, Polyline> polylines = {};
   LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
@@ -844,7 +844,7 @@ class _HomePageState extends State<HomePage> {
   void createIconMarker(){
     if (nearByIcon==null){
       ImageConfiguration imageConfiguration = createLocalImageConfiguration(context,size:Size( 2, 2));
-      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/car_driving.png")
+      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/ambulancecar.png")
           .then((value){
         nearByIcon = value;
       })
