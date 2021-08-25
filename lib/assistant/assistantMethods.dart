@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:ambulance_hailer/library/configMaps.dart';
@@ -10,6 +11,7 @@ import 'package:ambulance_hailer/models/addresse.dart';
 import 'package:ambulance_hailer/pages/DataHandler/appData.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import "package:http/http.dart" as http;
 class AssistantMethods {
   static Future<String> searchCoordinateAddress(Position position,context)
   async
@@ -79,5 +81,41 @@ class AssistantMethods {
     double totalFareAmount = timeTravelFare + distancTravelFare;
 
     return totalFareAmount.truncate();
+  }
+
+  static sendNotificationToDriver(String token,context,String rideRequestId)
+  async {
+    var destination = Provider.of<AppData>(context,listen: false).dropOffLocation;
+     Map<String,String>headerMap =
+     {
+       'Content-Type': 'application/json',
+       'Authorization': serverToken,
+     };
+     Map notificationMap =
+     {
+       'body': 'DropOff Address',
+       'title': 'New Ride Request'
+     };
+     Map dataMap =
+
+     {
+       'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+       'id': '1',
+       'status': 'done',
+       'ride_request_id':rideRequestId
+     };
+     Map sendNotification =
+     {
+       "notification":notificationMap,
+       "data" : dataMap,
+       "priority" :"high",
+       "to" :token,
+     };
+     var res = await http.post(
+       "https://fcm.googleapis.com/fcm/send",
+        headers: headerMap,
+        body: jsonEncode(sendNotification),
+     );
+     print(res);
   }
 }

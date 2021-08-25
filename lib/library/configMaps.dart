@@ -12,6 +12,8 @@ Users userCurrentInfo;
 StreamSubscription <Position> homeDriverStreamSubcription;
 final FirebaseAuth firebaseAuth = FirebaseAuth.instance;
 final myApiKey = "AIzaSyAtzQc5uOLC9UcrPka0QHCsrpxx7Chxl0A";
+String serverToken = "key=AAAAqI-qO1E:APA91bF0RhdW-NHnRGd6eTSiC0AfiSu4LskMhOvNoQ1ctuxFXeNcO5759gtqQGEzLAfEMvWKMvKBvPKDwjUzyvxLy4q4IJ-vypyxDArXseQ2Vxza2a7Gh8oPeVSLOvPtHnkERei2hXmY";
+
 Drivers driversInformation;
 Users usersInformation;
 StreamSubscription <Position> rideStreamSubcription;

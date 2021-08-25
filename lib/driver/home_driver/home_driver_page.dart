@@ -49,7 +49,7 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
   List<LatLng> polylineCoordinates = [];
   Map<PolylineId, Polyline> polylines = {};
   LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
-  GoogleMapController mapController;
+  //GoogleMapController mapController;
   BitmapDescriptor bitmapDescriptor;
   String placeDistancex;
   String startAddress = '';
@@ -84,8 +84,10 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
   _getCurrentLocation() async {
     await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
         .then((Position position) async {
-      setState(() {currentPosition = position;
-        mapController.animateCamera(
+          print(position);
+      setState(() {
+        currentPosition = position;
+      newGoogleMapController.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
               target: LatLng(position.latitude, position.longitude),
@@ -151,7 +153,7 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
                         myLocationButtonEnabled: false,
                         mapType: MapType.normal,
                         onMapCreated: (GoogleMapController controller) {
-                          mapController = controller;
+                          newGoogleMapController = controller;
                           _getCurrentLocation();
                         },
                       )),
@@ -234,7 +236,7 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
                                 height: 56,
                                 child: Icon(Icons.my_location),
                               ),
-                              onTap: () {mapController.animateCamera(
+                              onTap: () {newGoogleMapController.animateCamera(
                                   CameraUpdate.newCameraPosition(
                                     CameraPosition(
                                       target: LatLng(
@@ -276,7 +278,7 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
            Geofire.setLocation( currentfirebaseDriver.uid,position.latitude, position.longitude);
          }
           //LatLng latLong = LatLng(position.latitude, position.longitude);
-          mapController.animateCamera(
+          newGoogleMapController.animateCamera(
             CameraUpdate.newCameraPosition(
               CameraPosition(
                 target: LatLng(position.latitude, position.longitude),

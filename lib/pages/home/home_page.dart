@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
+import 'package:ambulance_hailer/allWidget/noDriverAvailableDialog.dart';
 import 'package:ambulance_hailer/assistant/assistantMethods.dart';
 import 'package:ambulance_hailer/assistant/geoFireAssistant.dart';
 import 'package:ambulance_hailer/library/configMaps.dart';
 import 'package:ambulance_hailer/library/place_request.dart';
+import 'package:ambulance_hailer/main.dart';
+import 'package:ambulance_hailer/models/allUsers.dart';
 import 'package:ambulance_hailer/models/nearbyAvailableDriver.dart';
+import 'package:ambulance_hailer/pages/DataHandler/appData.dart';
 import 'package:ambulance_hailer/pages/components/menu1.dart';
 import 'package:ambulance_hailer/utils/CustomTextStyle.dart';
 import 'package:ambulance_hailer/utils/bottom_sheet.dart';
@@ -31,10 +36,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   Set<Marker> markers = new Set();
-  Set<Marker> markerSet = new Set();
+  //Set<Marker> markerSet = new Set();
   HomeController hController = Get.put(HomeController());
   String _placeDistance;
-  CameraPosition initialLocation = CameraPosition(target:  LatLng(33.609434051916494, -7.623460799015407));
+  static final CameraPosition _kGooglePlex = CameraPosition(
+    target: LatLng(33.609434051916494, -7.623460799015407),
+    zoom: 50,
+  );
   List<LatLng> polylineCoordinates = [];
   Map<PolylineId, Polyline> polylines = {};
   LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
@@ -53,6 +61,9 @@ class _HomePageState extends State<HomePage> {
   bool nearbyAvailableDriverKeysLoader = false;
   DatabaseReference rideRequestRef;
   BitmapDescriptor nearByIcon;
+  List<NearbyAvailableDrivers> availableDriver;
+  String token;
+  Completer<GoogleMapController> _controller = Completer();
   @override
   void initState() {
     super.initState();
@@ -62,6 +73,10 @@ class _HomePageState extends State<HomePage> {
 
   void saveRideRequest() async {
     rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+
+    var pickUp  = Provider.of<AppData>(context,listen: false).pickUpLocation;
+    var dropOff  = Provider.of<AppData>(context,listen: false).dropOffLocation;
+
     List<Location> startPlacemark = await locationFromAddress(startAddress);
     List<Location> destinationPlacemark = await locationFromAddress(destinationAddress);
 
@@ -96,7 +111,6 @@ class _HomePageState extends State<HomePage> {
       "dropoff_address":destinationAddressController.text
     };
     rideRequestRef.push().set(rideInfoMap);
-    print(rideRequestRef.once().then((DataSnapshot snapshot) => print(snapshot.value['uid'])));
   }
 
   void cancelRideRequest(){
@@ -124,6 +138,11 @@ class _HomePageState extends State<HomePage> {
 
       String startCoordinatesString = '($startLatitude, $startLongitude)';
       String destinationCoordinatesString ='($destinationLatitude, $destinationLongitude)';
+
+      print(startCoordinatesString);
+      print(destinationCoordinatesString);
+
+
       // Start Location Marker
       Marker startMarker = Marker(
         markerId: MarkerId(startCoordinatesString),
@@ -248,10 +267,29 @@ class _HomePageState extends State<HomePage> {
     );
     polylines[id] = polyline;
   }
+  _addMarker(LatLng position, String id, BitmapDescriptor descriptor) {
+    MarkerId markerId = MarkerId(id);
+    Marker marker =
+    Marker(markerId: markerId, icon: descriptor, position: position);
+    //a revoir
+    markers.add(marker);
+  }
+  _addPolyLine(List<LatLng> polylineCoordinates) {
+    PolylineId id = PolylineId("poly");
+    Polyline polyline = Polyline(
+      polylineId: id,
+      points: polylineCoordinates,
+      width: 8,
+    );
+    polylines[id] = polyline;
+    setState(() {});
+  }
+
   _getCurrentLocation() async {
     await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
         .then((Position position) async {
-      setState(() {currentPosition = position;
+      setState(() {
+        currentPosition = position;
       mapController.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -304,7 +342,7 @@ class _HomePageState extends State<HomePage> {
                               child:
                               GoogleMap(
                                 markers: Set<Marker>.from(markers),
-                                initialCameraPosition: initialLocation,
+                                initialCameraPosition: _kGooglePlex,
                                 myLocationEnabled: true,
                                 myLocationButtonEnabled: false,
                                 mapType: MapType.normal,
@@ -372,7 +410,8 @@ class _HomePageState extends State<HomePage> {
                                         ),
                                         Container(
                                           padding: EdgeInsets.all(5),
-                                          child: TextFormField(
+                                          child:
+                                          TextFormField(
                                             style: GoogleFonts.nunito(
                                               textStyle: TextStyle(
                                                   color: Colors.black,
@@ -388,7 +427,8 @@ class _HomePageState extends State<HomePage> {
                                                 MaterialPageRoute(
                                                   builder: (context) => PlacePicker(
                                                     apiKey:myApiKey, // Put YOUR OWN KEY here.
-                                                    onPlacePicked: (result) {startAddressFocusNode.unfocus();
+                                                    onPlacePicked: (result) {
+                                                      startAddressFocusNode.unfocus();
                                                     destinationAddressFocusNode.unfocus();
                                                     setState(() {
                                                       if (markers.isNotEmpty)
@@ -564,6 +604,8 @@ class _HomePageState extends State<HomePage> {
                                                              return RequestTripPage();
                                                            });*/
                                                                       saveRideRequest();
+                                                                      availableDriver = GeoFireAssistant.nearbyAvailableList;
+                                                                      searchNearestDriver();
                                                                       showModalBottomSheet(
                                                                         backgroundColor: Colors.transparent,
                                                                         isScrollControlled: true,
@@ -615,7 +657,6 @@ class _HomePageState extends State<HomePage> {
                                                                                               margin: EdgeInsets.only(top: 16),
                                                                                               child: RaisedButton(
                                                                                                 onPressed: () {
-                                                                                                  print("closed");
                                                                                                   rideRequestRef.remove();
                                                                                                   Navigator.pop(context);
                                                                                                 },
@@ -781,7 +822,7 @@ class _HomePageState extends State<HomePage> {
   void initGeoFireListener() {
     Geofire.initialize("availableDriver");
 
-    Geofire.queryAtLocation(currentPosition.latitude, -7.623460799015407, 100).listen((map) {
+    Geofire.queryAtLocation(currentPosition.latitude, currentPosition.longitude, 100).listen((map) {
       if (map["key"] != null) {
         var callBack = map['callBack'];
         switch (callBack) {
@@ -791,7 +832,6 @@ class _HomePageState extends State<HomePage> {
             nearbyAvailableDrivers.latitude = map["latitude"];
             nearbyAvailableDrivers.longitude = map["longitude"];
             GeoFireAssistant.nearbyAvailableList.add(nearbyAvailableDrivers);
-            print(GeoFireAssistant.nearbyAvailableList);
             updateAvailableDriverOnMap();
             break;
 
@@ -832,12 +872,9 @@ class _HomePageState extends State<HomePage> {
           icon:nearByIcon,
           rotation :AssistantMethods.createRadomNumber(60)
       );
-      print(markers);
       tMarkers.add(marker);
       setState(() {
         markers=tMarkers;
-        print(markers);
-        print("cooly");
       });
     }
   }
@@ -850,5 +887,41 @@ class _HomePageState extends State<HomePage> {
       })
       ;
     }
+  }
+  void searchNearestDriver()
+  {
+    if (availableDriver.length==0)
+    {
+      cancelRideRequest();
+      noDriverFound();
+      return;
+    }
+    var driver = availableDriver[0];
+    notifyDriver(driver);
+    availableDriver.removeAt(0);
+  }
+  void noDriverFound(){
+    showDialog(context: context, builder: (BuildContext context)=>NoDriverAvailableDialog());
+  }
+   notifyDriver(NearbyAvailableDrivers driver)
+  {
+    //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    print(rideRequestRef.key);
+    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    driversRef.child(driver.key)
+        .child("newRide")
+        .set("-Mhus_-fhlZpB-6znEpK");
+
+    driversRef.child(driver.key)
+        .child("token")
+        .once().then((DataSnapshot snapshot)
+      {
+        if (snapshot.value!=null)
+        {
+        String token = snapshot.value.toString();
+        print( snapshot.value);
+          AssistantMethods.sendNotificationToDriver(token, context,"-Mhus_-fhlZpB-6znEpK");
+        }
+      });
   }
 }
