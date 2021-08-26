@@ -6,8 +6,6 @@ import 'package:ambulance_hailer/assistant/assistantMethods.dart';
 import 'package:ambulance_hailer/assistant/geoFireAssistant.dart';
 import 'package:ambulance_hailer/library/configMaps.dart';
 import 'package:ambulance_hailer/library/place_request.dart';
-import 'package:ambulance_hailer/main.dart';
-import 'package:ambulance_hailer/models/allUsers.dart';
 import 'package:ambulance_hailer/models/nearbyAvailableDriver.dart';
 import 'package:ambulance_hailer/pages/DataHandler/appData.dart';
 import 'package:ambulance_hailer/pages/components/menu1.dart';
@@ -26,6 +24,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_maps_place_picker/google_maps_place_picker.dart';
 import 'package:geolocator/geolocator.dart';
 
+//import '../../main.dart';
+import '../../main.dart';
 import 'home_controller.dart';
 import 'package:provider/provider.dart';
 
@@ -35,113 +35,159 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  Set<Marker> markers = new Set();
-  //Set<Marker> markerSet = new Set();
-  HomeController hController = Get.put(HomeController());
-  String _placeDistance;
-  static final CameraPosition _kGooglePlex = CameraPosition(
-    target: LatLng(33.609434051916494, -7.623460799015407),
-    zoom: 50,
-  );
-  List<LatLng> polylineCoordinates = [];
-  Map<PolylineId, Polyline> polylines = {};
-  LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
+  CameraPosition _initialLocation = CameraPosition(target: LatLng(0.0, 0.0));
   GoogleMapController mapController;
-  BitmapDescriptor bitmapDescriptor;
-  String placeDistancex;
+  LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
+  Position currentPosition;
+  LatLng destinationPosition;
+  String _currentAddress = '';
+
+  final startAddressController = TextEditingController();
+  final destinationAddressController = TextEditingController();
+
+  final startAddressFocusNode = FocusNode();
+  final desrinationAddressFocusNode = FocusNode();
+
   String startAddress = '';
   String destinationAddress = '';
-  RxString currentAddress = ''.obs;
-  Position currentPosition;
+  String placeDistance;
+  int fareAmount =0;
+  Set<Marker> markers = {};
+
   PolylinePoints polylinePoints;
-  TextEditingController startAddressController = TextEditingController();
-  final destinationAddressController = TextEditingController();
-  final startAddressFocusNode = FocusNode();
-  final destinationAddressFocusNode = FocusNode();
-  bool nearbyAvailableDriverKeysLoader = false;
-  DatabaseReference rideRequestRef;
+  Map<PolylineId, Polyline> polylines = {};
+  List<LatLng> polylineCoordinates = [];
+
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   BitmapDescriptor nearByIcon;
   List<NearbyAvailableDrivers> availableDriver;
   String token;
-  Completer<GoogleMapController> _controller = Completer();
-  @override
-  void initState() {
-    super.initState();
-    _getCurrentLocation();
-    GoogleMapsServices.getCurrentOnLineUserInfo();
+  DatabaseReference rideRequestRef;
+  String rideRequestKey;
+  String state = "normal";
+  StreamSubscription<Event> rideStreamSubscription;
+  double rideRequestHeigth;
+  double rideDriverHeigth;
+  String carDetailsDriverx;
+  List weightList = [];
+  Widget _textField({
+    TextEditingController controller,
+    FocusNode focusNode,
+    String label,
+    String hint,
+    double width,
+    Icon prefixIcon,
+    Widget suffixIcon,
+    Function(String) locationCallback,
+  }) {
+    return Container(
+      width: width * 0.8,
+      child: TextField(
+        onChanged: (value) {
+          locationCallback(value);
+        },
+        controller: controller,
+        focusNode: focusNode,
+        decoration: new InputDecoration(
+          prefixIcon: prefixIcon,
+          suffixIcon: suffixIcon,
+          labelText: label,
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.all(
+              Radius.circular(10.0),
+            ),
+            borderSide: BorderSide(
+              color: Colors.grey.shade400,
+              width: 2,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.all(
+              Radius.circular(10.0),
+            ),
+            borderSide: BorderSide(
+              color: Colors.blue.shade300,
+              width: 2,
+            ),
+          ),
+          contentPadding: EdgeInsets.all(15),
+          hintText: hint,
+        ),
+      ),
+    );
   }
 
-  void saveRideRequest() async {
-    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
-
-    var pickUp  = Provider.of<AppData>(context,listen: false).pickUpLocation;
-    var dropOff  = Provider.of<AppData>(context,listen: false).dropOffLocation;
-
-    List<Location> startPlacemark = await locationFromAddress(startAddress);
-    List<Location> destinationPlacemark = await locationFromAddress(destinationAddress);
-
-    double startLatitude = startAddress == currentAddress
-        ? currentPosition.latitude
-        : startPlacemark[0].latitude;
-
-    double startLongitude = startAddress == currentAddress
-        ? currentPosition.longitude
-        : startPlacemark[0].longitude;
-
-    double destinationLatitude = destinationPlacemark[0].latitude;
-    double destinationLongitude = destinationPlacemark[0].longitude;
-
-    Map pickUpLocMap = {
-      "latitude": startLatitude,
-      "longitude": startLongitude,
-    };
-    Map dropOffMap = {
-      "latitude": destinationLatitude,
-      "longitude": destinationLongitude,
-    };
-    Map rideInfoMap = {
-      "driver_in": "waiting",
-      "payment_method":"cash",
-      "pickup":pickUpLocMap,
-      "drop":dropOffMap,
-      "created_at":DateTime.now().toString(),
-      "rider_name":"Cephas",
-      "rider_phone":"0639607953",
-      "pickup_address":startAddress,
-      "dropoff_address":destinationAddressController.text
-    };
-    rideRequestRef.push().set(rideInfoMap);
+  // Method for retrieving the current location
+  _getCurrentLocation() async {
+    await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
+        .then((Position position) async {
+      setState(() {
+        currentPosition = position;
+        print('CURRENT POS: $currentPosition');
+        mapController.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(position.latitude, position.longitude),
+              zoom: 18.0,
+            ),
+          ),
+        );
+      });
+      await _getAddress();
+    }).catchError((e) {
+      print(e);
+    });
+    initGeoFireListener();
   }
 
-  void cancelRideRequest(){
-    rideRequestRef.remove();
+  // Method for retrieving the address
+  _getAddress() async {
+    try {
+      List<Placemark> p = await placemarkFromCoordinates(
+          currentPosition.latitude, currentPosition.longitude);
+
+      Placemark place = p[0];
+
+      setState(() {
+        _currentAddress =
+            "${place.name}, ${place.locality}, ${place.postalCode}, ${place.country}";
+        startAddressController.text = _currentAddress;
+        startAddress = _currentAddress;
+      });
+    } catch (e) {
+      print(e);
+    }
   }
+
+  // Method for calculating the distance between two places
   Future<bool> _calculateDistance() async {
     try {
       // Retrieving placemarks from addresses
       List<Location> startPlacemark = await locationFromAddress(startAddress);
-      List<Location> destinationPlacemark = await locationFromAddress(destinationAddress);
+      List<Location> destinationPlacemark =
+          await locationFromAddress(destinationAddress);
 
       // Use the retrieved coordinates of the current position,
       // instead of the address if the start position is user's
       // current position, as it results in better accuracy.
-      double startLatitude = startAddress == currentAddress
-          ?currentPosition.latitude
+      double startLatitude = startAddress == _currentAddress
+          ? currentPosition.latitude
           : startPlacemark[0].latitude;
 
-      double startLongitude = startAddress == currentAddress
+      double startLongitude = startAddress == _currentAddress
           ? currentPosition.longitude
           : startPlacemark[0].longitude;
 
       double destinationLatitude = destinationPlacemark[0].latitude;
       double destinationLongitude = destinationPlacemark[0].longitude;
 
+      destinationPosition =LatLng(destinationPlacemark[0].latitude, destinationPlacemark[0].longitude);
+
       String startCoordinatesString = '($startLatitude, $startLongitude)';
-      String destinationCoordinatesString ='($destinationLatitude, $destinationLongitude)';
-
-      print(startCoordinatesString);
-      print(destinationCoordinatesString);
-
+      String destinationCoordinatesString =
+          '($destinationLatitude, $destinationLongitude)';
 
       // Start Location Marker
       Marker startMarker = Marker(
@@ -149,7 +195,7 @@ class _HomePageState extends State<HomePage> {
         position: LatLng(startLatitude, startLongitude),
         infoWindow: InfoWindow(
           title: 'Start $startCoordinatesString',
-          snippet:startAddress,
+          snippet: startAddress,
         ),
         icon: BitmapDescriptor.defaultMarker,
       );
@@ -160,7 +206,7 @@ class _HomePageState extends State<HomePage> {
         position: LatLng(destinationLatitude, destinationLongitude),
         infoWindow: InfoWindow(
           title: 'Destination $destinationCoordinatesString',
-          snippet:destinationAddressController.text,
+          snippet: destinationAddressController.text,
         ),
         icon: BitmapDescriptor.defaultMarker,
       );
@@ -169,6 +215,15 @@ class _HomePageState extends State<HomePage> {
       markers.add(startMarker);
       markers.add(destinationMarker);
 
+      print(
+        'START COORDINATES: ($startLatitude, $startLongitude)',
+      );
+      print(
+        'DESTINATION COORDINATES: ($destinationLatitude, $destinationLongitude)',
+      );
+
+      // Calculating to check that the position relative
+      // to the frame, and pan & zoom the camera accordingly.
       double miny = (startLatitude <= destinationLatitude)
           ? startLatitude
           : destinationLatitude;
@@ -226,15 +281,19 @@ class _HomePageState extends State<HomePage> {
       }
 
       setState(() {
-        _placeDistance = totalDistance.toStringAsFixed(2);
+        placeDistance = totalDistance.toStringAsFixed(2);
+        print('DISTANCE: $placeDistance km');
       });
-
+      estimateFareAmount();
       return true;
     } catch (e) {
       print(e);
     }
     return false;
   }
+
+  // Formula for calculating distance between two coordinates
+  // https://stackoverflow.com/a/54138876/11910277
   double _coordinateDistance(lat1, lon1, lat2, lon2) {
     var p = 0.017453292519943295;
     var c = cos;
@@ -243,10 +302,17 @@ class _HomePageState extends State<HomePage> {
         c(lat1 * p) * c(lat2 * p) * (1 - c((lon2 - lon1) * p)) / 2;
     return 12742 * asin(sqrt(a));
   }
-  _createPolylines(double startLatitude,double startLongitude,double destinationLatitude,double destinationLongitude) async {
+
+  // Create the polylines for showing the route between two places
+  _createPolylines(
+    double startLatitude,
+    double startLongitude,
+    double destinationLatitude,
+    double destinationLongitude,
+  ) async {
     polylinePoints = PolylinePoints();
     PolylineResult result = await polylinePoints.getRouteBetweenCoordinates(
-      myApiKey,
+      myApiKey, // Google Maps API Key
       PointLatLng(startLatitude, startLongitude),
       PointLatLng(destinationLatitude, destinationLongitude),
       travelMode: TravelMode.transit,
@@ -262,572 +328,1000 @@ class _HomePageState extends State<HomePage> {
     Polyline polyline = Polyline(
       polylineId: id,
       color: Colors.red,
-      points:polylineCoordinates,
+      points: polylineCoordinates,
       width: 3,
     );
     polylines[id] = polyline;
   }
-  _addMarker(LatLng position, String id, BitmapDescriptor descriptor) {
-    MarkerId markerId = MarkerId(id);
-    Marker marker =
-    Marker(markerId: markerId, icon: descriptor, position: position);
-    //a revoir
-    markers.add(marker);
-  }
-  _addPolyLine(List<LatLng> polylineCoordinates) {
-    PolylineId id = PolylineId("poly");
-    Polyline polyline = Polyline(
-      polylineId: id,
-      points: polylineCoordinates,
-      width: 8,
-    );
-    polylines[id] = polyline;
-    setState(() {});
-  }
 
-  _getCurrentLocation() async {
-    await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high)
-        .then((Position position) async {
-      setState(() {
-        currentPosition = position;
-      mapController.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(position.latitude, position.longitude),
-            zoom: 18.0,
-          ),
-        ),
-      );
-      });
-      await _getAddress();
-    }).catchError((e) {
-      print(e);
-    });
-    initGeoFireListener();
-  }
-  _getAddress() async {
-    try {
-      List<Placemark> p = await placemarkFromCoordinates(
-          currentPosition.latitude, currentPosition.longitude);
-
-      Placemark place = p[0];
-
-      setState(() {currentAddress.value =
-      "${place.name}, ${place.locality}, ${place.postalCode}, ${place.country}";
-      startAddressController.text = currentAddress.value ;
-      startAddress = currentAddress.value ;
-      });
-    } catch (e) {
-      print(e);
-    }
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+    GoogleMapsServices.getCurrentOnLineUserInfo();
   }
 
   @override
   Widget build(BuildContext context) {
+    var height = MediaQuery.of(context).size.height;
+    var width = MediaQuery.of(context).size.width;
     Size size = Get.size;
     createIconMarker();
-    return MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          resizeToAvoidBottomInset: false,
-          body: Container(
-            child: GetBuilder<HomeController>(
-              builder: (controller) {
-                return Container(
-                    child:
-                    Stack(
+    return Container(
+      height: height,
+      width: width,
+      child: Scaffold(
+        key: _scaffoldKey,
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          children: <Widget>[
+            // Map View
+            GoogleMap(
+              markers: Set<Marker>.from(markers),
+              initialCameraPosition: _initialLocation,
+              myLocationEnabled: true,
+              myLocationButtonEnabled: false,
+              mapType: MapType.normal,
+              zoomGesturesEnabled: true,
+              zoomControlsEnabled: false,
+              polylines: Set<Polyline>.of(polylines.values),
+              onMapCreated: (GoogleMapController controller) {
+                mapController = controller;
+                _getCurrentLocation();
+              },
+            ),
+            // Show zoom buttons
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 10.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                    ClipOval(
+                      child: Material(
+                        color: Colors.blue.shade100, // button color
+                        child: InkWell(
+                          splashColor: Colors.blue, // inkwell color
+                          child: SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: Icon(Icons.add),
+                          ),
+                          onTap: () {
+                            mapController.animateCamera(
+                              CameraUpdate.zoomIn(),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    ClipOval(
+                      child: Material(
+                        color: Colors.blue.shade100, // button color
+                        child: InkWell(
+                          splashColor: Colors.blue, // inkwell color
+                          child: SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: Icon(Icons.remove),
+                          ),
+                          onTap: () {
+                            mapController.animateCamera(
+                              CameraUpdate.zoomOut(),
+                            );
+                          },
+                        ),
+                      ),
+                    )
+                  ],
+                ),
+              ),
+            ),
+            // Show the place input fields & button for
+            // showing the route
+            /*  SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white70,
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(20.0),
+                      ),
+                    ),
+                    width: width * 0.9,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Container(
-                              height: double.infinity,
-                              child:
-                              GoogleMap(
-                                markers: Set<Marker>.from(markers),
-                                initialCameraPosition: _kGooglePlex,
-                                myLocationEnabled: true,
-                                myLocationButtonEnabled: false,
-                                mapType: MapType.normal,
-                                zoomGesturesEnabled: true,
-                                zoomControlsEnabled: false,
-                                polylines: Set<Polyline>.of(polylines.values),
-                                onMapCreated: (GoogleMapController controller) {
-                                  mapController = controller;
-                                  _getCurrentLocation();
+                          Text(
+                            'Places',
+                            style: TextStyle(fontSize: 20.0),
+                          ),
+                          SizedBox(height: 10),
+                          _textField(
+                              label: 'Start',
+                              hint: 'Choose starting point',
+                              prefixIcon: Icon(Icons.looks_one),
+                              suffixIcon: IconButton(
+                                icon: Icon(Icons.my_location),
+                                onPressed: () {
+                                  startAddressController.text = _currentAddress;
+                                  _startAddress = _currentAddress;
                                 },
-                              )),
-                          SafeArea(
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 30.0),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.all(
-                                      Radius.circular(20.0),
-                                    ),
-                                  ),
-                                  width: size.width * 0.9,
-                                  child: Padding(
-                                    padding:
-                                    const EdgeInsets.only(top: 10.0, bottom: 10.0),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: <Widget>[
-                                        Text("WHERE ARE YOU GOING ?",
-                                            style: GoogleFonts.nunito(
-                                              textStyle: TextStyle(
-                                                  color: Colors.black,
-                                                  letterSpacing: .1),
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w900,
-                                            )),
-                                        SizedBox(height: 10),
-                                        Container(
-                                          padding: EdgeInsets.all(5),
-                                          child: TextFormField(
-                                            style: GoogleFonts.nunito(
-                                              textStyle: TextStyle(
-                                                  color: Colors.black,
-                                                  letterSpacing: .1),
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            controller:startAddressController,
-                                            focusNode:startAddressFocusNode,
-                                            readOnly: true,
-                                            onTap: () async {
+                              ),
+                              controller: startAddressController,
+                              focusNode: startAddressFocusNode,
+                              width: width,
+                              locationCallback: (String value) {
+                                setState(() {
+                                  _startAddress = value;
+                                });
+                              }),
+                          SizedBox(height: 10),
+                        Container(
+                          padding: EdgeInsets.all(5),
+                          child:
+                          TextFormField(
+                            style: GoogleFonts.nunito(
+                              textStyle: TextStyle(
+                                  color: Colors.black,
+                                  letterSpacing: .1),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            controller:destinationAddressController,
+                            readOnly: true,
+                            onTap: () async {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => PlacePicker(
+                                    apiKey:myApiKey, // Put YOUR OWN KEY here.
+                                    onPlacePicked: (result) {
+                                      startAddressFocusNode.unfocus();
+                                      desrinationAddressFocusNode.unfocus();
+                                      setState(() {
+                                        if (markers.isNotEmpty)
+                                          markers.clear();
+                                        if (polylines.isNotEmpty)
+                                          polylines.clear();
+                                        if (polylineCoordinates
+                                            .isNotEmpty)polylineCoordinates.clear();
+                                        _placeDistance = null;
+                                      });
 
-                                            },
-                                            decoration: const InputDecoration(
-                                              labelStyle:
-                                              TextStyle(color: Colors.black),
-                                              icon: FaIcon(
-                                                  FontAwesomeIcons.locationArrow,
-                                                  color: Colors.black),
-                                              labelText: 'Actual position',
+                                      _calculateDistance()
+                                          .then((isCalculated) {
+                                        if (isCalculated) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Distance Calculated Sucessfully'),
                                             ),
-                                          ),
-                                        ),
-                                        Container(
-                                          padding: EdgeInsets.all(5),
-                                          child:
-                                          TextFormField(
-                                            style: GoogleFonts.nunito(
-                                              textStyle: TextStyle(
-                                                  color: Colors.black,
-                                                  letterSpacing: .1),
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Error Calculating Distance'),
                                             ),
-                                            controller:destinationAddressController,
-                                            readOnly: true,
-                                            onTap: () async {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => PlacePicker(
-                                                    apiKey:myApiKey, // Put YOUR OWN KEY here.
-                                                    onPlacePicked: (result) {
-                                                      startAddressFocusNode.unfocus();
-                                                    destinationAddressFocusNode.unfocus();
-                                                    setState(() {
-                                                      if (markers.isNotEmpty)
-                                                        markers.clear();
-                                                      if (polylines.isNotEmpty)
-                                                        polylines.clear();
-                                                      if (polylineCoordinates
-                                                          .isNotEmpty)polylineCoordinates.clear();
-                                                      _placeDistance = null;
-                                                    });
-
-                                                    _calculateDistance()
-                                                        .then((isCalculated) {
-                                                      if (isCalculated) {
-                                                        ScaffoldMessenger.of(context)
-                                                            .showSnackBar(
-                                                          SnackBar(
-                                                            content: Text(
-                                                                'Distance Calculated Sucessfully'),
-                                                          ),
-                                                        );
-                                                      } else {
-                                                        ScaffoldMessenger.of(context)
-                                                            .showSnackBar(
-                                                          SnackBar(
-                                                            content: Text(
-                                                                'Error Calculating Distance'),
-                                                          ),
-                                                        );
-                                                      }
-                                                    });
-                                                    Navigator.of(context).pop();
-                                                    destinationAddressController
-                                                        .text =
-                                                        result.formattedAddress;destinationAddress =destinationAddressController
-                                                        .toString();
-                                                    },
-                                                    initialPosition: initialPosition,
-                                                    useCurrentLocation: true,
-                                                    selectInitialPosition: true,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                            decoration: const InputDecoration(
-                                              labelStyle:
-                                              TextStyle(color: Colors.black),
-                                              icon: FaIcon(FontAwesomeIcons.search,
-                                                  color: Colors.black),
-                                              labelText: 'Choose a destination',
-                                            ),
-                                            onChanged: (value) {destinationAddress = value;
-                                            },
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                          );
+                                        }
+                                      });
+                                      Navigator.of(context).pop();
+                                      destinationAddressController
+                                          .text =
+                                          result.formattedAddress;_destinationAddress =destinationAddressController
+                                          .toString();
+                                    },
+                                    initialPosition: initialPosition,
+                                    useCurrentLocation: true,
+                                    selectInitialPosition: true,
                                   ),
                                 ),
+                              );
+                            },
+                            decoration: const InputDecoration(
+                              labelStyle:
+                              TextStyle(color: Colors.black),
+                              icon: FaIcon(FontAwesomeIcons.search,
+                                  color: Colors.black),
+                              labelText: 'Choose a destination',
+                            ),
+                            onChanged: (value) {_destinationAddress = value;
+                            },
+                          ),
+                        ),
+                          SizedBox(height: 10),
+                          Visibility(
+                            visible: _placeDistance == null ? false : true,
+                            child: Text(
+                              'DISTANCE: $_placeDistance km',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
-                          SafeArea(
-                              child: Column(
-                                children: <Widget>[
-                                  Align(
-                                    alignment: Alignment.topRight,
-                                    child: Container(
-                                      child: CircleAvatar(
-                                        backgroundColor: Colors.red,
-                                        child:
+                          SizedBox(height: 5),
+                          ElevatedButton(
+                            onPressed: (_startAddress != '' &&
+                                _destinationAddress != '')
+                                ? () async {
+                              startAddressFocusNode.unfocus();
+                              desrinationAddressFocusNode.unfocus();
+                              setState(() {
+                                if (markers.isNotEmpty) markers.clear();
+                                if (polylines.isNotEmpty)
+                                  polylines.clear();
+                                if (polylineCoordinates.isNotEmpty)
+                                  polylineCoordinates.clear();
+                                _placeDistance = null;
+                              });
 
-                                        IconButton(
-                                            icon: Icon(Icons.menu,color: Colors.white),
-                                            onPressed: () {
-                                              showDialog(
-                                                  context: context,
-                                                  builder: (context) {
-                                                    return MenuOnePage();
-                                                  });
-                                            }),
-                                      ),
+                              _calculateDistance().then((isCalculated) {
+                                if (isCalculated) {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Distance Calculated Sucessfully'),
+                                    ),
+                                  );
+                                } else {
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Error Calculating Distance'),
+                                    ),
+                                  );
+                                }
+                              });
+                            }
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                'Show Route'.toUpperCase(),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20.0,
+                                ),
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              primary: Colors.red,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20.0),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),*/
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 30.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.all(
+                        Radius.circular(20.0),
+                      ),
+                    ),
+                    width: size.width * 0.9,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10.0, bottom: 10.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text("WHERE ARE YOU GOING ?",
+                              style: GoogleFonts.nunito(
+                                textStyle: TextStyle(
+                                    color: Colors.black, letterSpacing: .1),
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                              )),
+                          SizedBox(height: 10),
+                          Container(
+                            padding: EdgeInsets.all(5),
+                            child: TextFormField(
+                              style: GoogleFonts.nunito(
+                                textStyle: TextStyle(
+                                    color: Colors.black, letterSpacing: .1),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              controller: startAddressController,
+                              focusNode: startAddressFocusNode,
+                              readOnly: true,
+                              onTap: () async {},
+                              decoration: const InputDecoration(
+                                labelStyle: TextStyle(color: Colors.black),
+                                icon: FaIcon(FontAwesomeIcons.locationArrow,
+                                    color: Colors.black),
+                                labelText: 'Actual position',
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.all(5),
+                            child: TextFormField(
+                              style: GoogleFonts.nunito(
+                                textStyle: TextStyle(
+                                    color: Colors.black, letterSpacing: .1),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              controller: destinationAddressController,
+                              readOnly: true,
+                              onTap: () async {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PlacePicker(
+                                      apiKey:
+                                          myApiKey, // Put YOUR OWN KEY here.
+                                      onPlacePicked: (result) {
+                                        startAddressFocusNode.unfocus();
+                                        desrinationAddressFocusNode.unfocus();
+                                        setState(() {
+                                          if (markers.isNotEmpty)
+                                            markers.clear();
+                                          if (polylines.isNotEmpty)
+                                            polylines.clear();
+                                          if (polylineCoordinates.isNotEmpty)
+                                            polylineCoordinates.clear();
+                                          placeDistance = null;
+                                        });
+                                        setRideRequestPanel();
+                                        _calculateDistance()
+                                            .then((isCalculated) {
+                                          if (isCalculated) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                    'Distance Calculated Sucessfully'),
+                                              ),
+                                            );
+                                          } else {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                    'Error Calculating Distance'),
+                                              ),
+                                            );
+                                          }
+                                        });
+                                        Navigator.of(context).pop();
+                                        destinationAddressController.text =
+                                            result.formattedAddress;
+                                        destinationAddress =
+                                            destinationAddressController
+                                                .toString();
+                                      },
+                                      initialPosition: initialPosition,
+                                      useCurrentLocation: true,
+                                      selectInitialPosition: true,
                                     ),
                                   ),
-                                  Spacer(),
-                                  Visibility(
-                                    visible: destinationAddress == '' ? false : true,
-                                    child: Container(
-                                        decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(20.0),
-                                            color: Colors.white),
-                                        height: 150,
-                                        child: Column(
-                                          children: <Widget>[
-                                            Expanded(
-                                              child: SingleChildScrollView(
-                                                physics: BouncingScrollPhysics(),
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: <Widget>[
-                                                    Container(
-                                                      padding: EdgeInsets.all(10),
-                                                      child: Row(children: [
-                                                        Text("👋 Hello Cephas ZOUBGA",
-                                                            style: GoogleFonts.nunito(
-                                                              textStyle: TextStyle(
-                                                                  color: Colors.black,
-                                                                  letterSpacing: .1),
-                                                              fontSize: 20,
-                                                              fontWeight: FontWeight.w900,
-                                                            ))
-                                                      ]),
-                                                    ),
-                                                    Align(
-                                                      alignment: Alignment.bottomCenter,
-                                                      child: Container(
-                                                          padding:
-                                                          const EdgeInsets.all(32.0),
-                                                          decoration: BoxDecoration(
-                                                            borderRadius: BorderRadius.only(
-                                                                topLeft:
-                                                                Radius.circular(20.0),
-                                                                topRight:
-                                                                Radius.circular(20.0)),
-                                                            color: Colors.grey.shade900,
-                                                          ),
-                                                          child: Column(
-                                                            children: [
-                                                              Row(
-                                                                children: <Widget>[
-                                                                  Text('DISTANCE: $_placeDistance km',
-                                                                    style: TextStyle(
-                                                                        color: Colors.white,
-                                                                        fontWeight:
-                                                                        FontWeight.bold,
-                                                                        fontSize: 18.0),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              Row(
-                                                                children: <Widget>[
-                                                                  Text(
-                                                                    "Price :" + " \$35.99",
-                                                                    style: TextStyle(
-                                                                        color: Colors.white,
-                                                                        fontWeight:
-                                                                        FontWeight.bold,
-                                                                        fontSize: 18.0),
-                                                                  ),
-                                                                  Spacer(),
-                                                                  RaisedButton(
-                                                                    padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                        vertical: 8.0,
-                                                                        horizontal:
-                                                                        16.0),
-                                                                    shape: RoundedRectangleBorder(
-                                                                        borderRadius:
-                                                                        BorderRadius
-                                                                            .circular(
-                                                                            10.0)),
-                                                                    onPressed: () {
-                                                                      /*  showDialog(
+                                );
+                              },
+                              decoration: const InputDecoration(
+                                labelStyle: TextStyle(color: Colors.black),
+                                icon: FaIcon(FontAwesomeIcons.search,
+                                    color: Colors.black),
+                                labelText: 'Choose a destination',
+                              ),
+                              onChanged: (value) {
+                                destinationAddress = value;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+                child: Column(
+              children: <Widget>[
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Container(
+                    child: CircleAvatar(
+                      backgroundColor: Colors.red,
+                      child: IconButton(
+                          icon: Icon(Icons.menu, color: Colors.white),
+                          onPressed: () {
+                            showDialog(
+                                context: context,
+                                builder: (context) {
+                                  return MenuOnePage();
+                                });
+                          }),
+                    ),
+                  ),
+                ),
+                Spacer(),
+                Visibility(
+                    visible: destinationAddress == '' ? false : true,
+                    child: rideRequestHeigth == 150
+                        ? Container(
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20.0),
+                                color: Colors.white),
+                            height: rideRequestHeigth,
+                            child: Column(
+                              children: <Widget>[
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    physics: BouncingScrollPhysics(),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        Container(
+                                          padding: EdgeInsets.all(10),
+                                          child: Row(children: [
+                                            Text("👋 Hi Cephas ZOUBGA",
+                                                style: GoogleFonts.nunito(
+                                                  textStyle: TextStyle(
+                                                      color: Colors.black,
+                                                      letterSpacing: .1),
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w900,
+                                                ))
+                                          ]),
+                                        ),
+                                        Align(
+                                          alignment: Alignment.bottomCenter,
+                                          child: Container(
+                                              padding:
+                                                  const EdgeInsets.all(32.0),
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.only(
+                                                    topLeft:
+                                                        Radius.circular(20.0),
+                                                    topRight:
+                                                        Radius.circular(20.0)),
+                                                color: Colors.grey.shade900,
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  Row(
+                                                    children: <Widget>[
+                                                      Text(
+                                                        'DISTANCE: $placeDistance km',
+                                                        style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18.0),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    children: <Widget>[
+                                                      Text(
+                                                        "Price :" + " \₵$fareAmount",
+                                                        style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.bold,
+                                                            fontSize: 18.0),
+                                                      ),
+                                                      Spacer(),
+                                                      RaisedButton(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                    .symmetric(
+                                                                vertical: 8.0,
+                                                                horizontal:
+                                                                    16.0),
+                                                        shape: RoundedRectangleBorder(
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        10.0)),
+                                                        onPressed: () {
+                                                          /*  showDialog(
                                                               context: context,
                                                               builder:
                                                                   (context) {
                                                                 return RequestTripPage();
                                                               });*/
-                                                                      /* showDialog(
+                                                          /* showDialog(
                                                            context: context,
                                                            builder: (context) {
                                                              return RequestTripPage();
                                                            });*/
-                                                                      saveRideRequest();
-                                                                      availableDriver = GeoFireAssistant.nearbyAvailableList;
-                                                                      searchNearestDriver();
-                                                                      showModalBottomSheet(
-                                                                        backgroundColor: Colors.transparent,
-                                                                        isScrollControlled: true,
-                                                                        context: context,
-                                                                        builder: (context) {
-                                                                          return Align(
-                                                                            alignment: Alignment.bottomCenter,
-                                                                            child:
+                                                          setState(() {
+                                                            state =
+                                                                "requesting";
+                                                          });
+                                                          saveRideRequest();
+                                                          availableDriver =
+                                                              GeoFireAssistant
+                                                                  .nearbyAvailableList;
+                                                          setDriverInfoPanel();
+                                                          showModalBottomSheet(
+                                                            backgroundColor:
+                                                                Colors
+                                                                    .transparent,
+                                                            isScrollControlled:
+                                                                true,
+                                                            context: context,
+                                                            builder: (context) {
+                                                              print("Le status est " +
+                                                                  statusRide);
+                                                              return statusRide ==
+                                                                      "accepted"
+                                                                  ? Align(
+                                                                      alignment:
+                                                                          Alignment
+                                                                              .bottomCenter,
+                                                                      child:
+                                                                          Container(
+                                                                        width: double
+                                                                            .infinity,
+                                                                        height:
+                                                                            240,
+                                                                        child:
+                                                                            Stack(
+                                                                          children: <
+                                                                              Widget>[
                                                                             Container(
                                                                               width: double.infinity,
-                                                                              height: 240,
-                                                                              child: Stack(
+                                                                              decoration: BoxDecoration(
+                                                                                borderRadius: BorderRadius.only(topRight: Radius.circular(16), topLeft: Radius.circular(16)),
+                                                                                color: Colors.white,
+                                                                              ),
+                                                                              margin: EdgeInsets.only(top: 50),
+                                                                              child: Column(
+                                                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                                                crossAxisAlignment: CrossAxisAlignment.center,
                                                                                 children: <Widget>[
+                                                                                  SizedBox(
+                                                                                    height: 70,
+                                                                                  ),
+                                                                                  SpinKitThreeBounce(
+                                                                                    color: Colors.redAccent,
+                                                                                    size: 50.0,
+                                                                                  ),
                                                                                   Container(
-                                                                                    width: double.infinity,
-                                                                                    decoration: BoxDecoration(
-                                                                                      borderRadius: BorderRadius.only(
-                                                                                          topRight: Radius.circular(16),
-                                                                                          topLeft: Radius.circular(16)),
-                                                                                      color: Colors.white,
-                                                                                    ),
-                                                                                    margin: EdgeInsets.only(top: 50),
-                                                                                    child: Column(
-                                                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                                                                      children: <Widget>[
-                                                                                        SizedBox(
-                                                                                          height: 70,
-                                                                                        ),
-                                                                                        SpinKitThreeBounce(
-                                                                                          color: Colors.redAccent,
-                                                                                          size: 50.0,
-                                                                                        ),
-                                                                                        Container(
-                                                                                          margin: EdgeInsets.only(left: 4, right: 4, top: 2),
-                                                                                          child: Text(
-                                                                                            "Requesting your ride please wait...",
-                                                                                            style: CustomTextStyle.regularTextStyle
-                                                                                                .copyWith(color: Colors.grey, fontSize: 12),
-                                                                                          ),
-                                                                                        ),
-                                                                                        SizedBox(
-                                                                                          height: 8,
-                                                                                        ),
-                                                                                        Flexible(
-                                                                                            child:
-                                                                                            Container(
-                                                                                              width: double.infinity,
-                                                                                              margin: EdgeInsets.only(top: 16),
-                                                                                              child: RaisedButton(
-                                                                                                onPressed: () {
-                                                                                                  rideRequestRef.remove();
-                                                                                                  Navigator.pop(context);
-                                                                                                },
-                                                                                                color: Colors.red,
-                                                                                                child: Text(
-                                                                                                  "Cancel Trip",
-                                                                                                  style: CustomTextStyle.mediumTextStyleWhite,
-                                                                                                ),
-                                                                                              ),
-                                                                                            )
-                                                                                        )
-                                                                                      ],
+                                                                                    margin: EdgeInsets.only(left: 4, right: 4, top: 2),
+                                                                                    child: Text(
+                                                                                      "Requesting your ride please wait toto...",
+                                                                                      style: CustomTextStyle.regularTextStyle.copyWith(color: Colors.grey, fontSize: 12),
                                                                                     ),
                                                                                   ),
-                                                                                  Align(
-                                                                                    alignment: Alignment.topCenter,
-                                                                                    child: Container(
-                                                                                      width: 100,
-                                                                                      height: 100,
-                                                                                      decoration: BoxDecoration(
-                                                                                          image: DecorationImage(
-                                                                                              image: AssetImage("images/taxi.png")),
-                                                                                          borderRadius:
-                                                                                          BorderRadius.all(Radius.circular(10)),color: Colors.white),
-                                                                                    ),
+                                                                                  SizedBox(
+                                                                                    height: 8,
                                                                                   ),
-                                                                                  Align(
-                                                                                    alignment: Alignment.topCenter,
-                                                                                    child:
-                                                                                    Container(
-                                                                                      alignment: Alignment.topCenter,
+                                                                                  Flexible(
                                                                                       child: Container(
-                                                                                        width: 100,
-                                                                                        margin: EdgeInsets.only(top: 70),
-                                                                                        height: 30,
-                                                                                        decoration: BoxDecoration(
-                                                                                            borderRadius: BorderRadius.only(
-                                                                                                bottomLeft: Radius.circular(10),
-                                                                                                bottomRight: Radius.circular(10)),
-                                                                                            color: Colors.black.withOpacity(0.5)),
-                                                                                        child: Row(
-                                                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                                                          children: <Widget>[
-                                                                                            Text(
-                                                                                              "4.5",
-                                                                                              style: CustomTextStyle.boldTextStyle.copyWith(
-                                                                                                  color: Colors.white, fontSize: 16),
-                                                                                            ),
-                                                                                            SizedBox(
-                                                                                              width: 4,
-                                                                                            ),
-                                                                                            Icon(
-                                                                                              Icons.star,
-                                                                                              color: Colors.yellowAccent.shade700,
-                                                                                            )
-                                                                                          ],
-                                                                                        ),
+                                                                                    width: double.infinity,
+                                                                                    margin: EdgeInsets.only(top: 16),
+                                                                                    child: RaisedButton(
+                                                                                      onPressed: () {
+                                                                                        cancelRideRequest();
+                                                                                      },
+                                                                                      color: Colors.red,
+                                                                                      child: Text(
+                                                                                        "Cancel Trip",
+                                                                                        style: CustomTextStyle.mediumTextStyleWhite,
                                                                                       ),
                                                                                     ),
-                                                                                  )
+                                                                                  ))
                                                                                 ],
                                                                               ),
                                                                             ),
-                                                                          );
-                                                                        },
-                                                                      );
-
-                                                                    },
-                                                                    color: Colors.red,
-                                                                    textColor: Colors.white,
-                                                                    child: Row(
-                                                                      mainAxisSize:
-                                                                      MainAxisSize.min,
-                                                                      children: <Widget>[
-                                                                        Text(
-                                                                          "Validate",
-                                                                          style: TextStyle(
-                                                                              fontWeight:
-                                                                              FontWeight
-                                                                                  .bold,
-                                                                              fontSize:
-                                                                              16.0),
+                                                                            Align(
+                                                                              alignment: Alignment.topCenter,
+                                                                              child: Container(
+                                                                                width: 100,
+                                                                                height: 100,
+                                                                                decoration: BoxDecoration(image: DecorationImage(image: AssetImage("images/taxi.png")), borderRadius: BorderRadius.all(Radius.circular(10)), color: Colors.white),
+                                                                              ),
+                                                                            ),
+                                                                            Align(
+                                                                              alignment: Alignment.topCenter,
+                                                                              child: Container(
+                                                                                alignment: Alignment.topCenter,
+                                                                                child: Container(
+                                                                                  width: 100,
+                                                                                  margin: EdgeInsets.only(top: 70),
+                                                                                  height: 30,
+                                                                                  decoration: BoxDecoration(borderRadius: BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)), color: Colors.black.withOpacity(0.5)),
+                                                                                  child: Row(
+                                                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                                                    children: <Widget>[
+                                                                                      Text(
+                                                                                        "4.5",
+                                                                                        style: CustomTextStyle.boldTextStyle.copyWith(color: Colors.white, fontSize: 16),
+                                                                                      ),
+                                                                                      SizedBox(
+                                                                                        width: 4,
+                                                                                      ),
+                                                                                      Icon(
+                                                                                        Icons.star,
+                                                                                        color: Colors.yellowAccent.shade700,
+                                                                                      )
+                                                                                    ],
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                            )
+                                                                          ],
                                                                         ),
-                                                                        const SizedBox(
-                                                                            width: 20.0),
-                                                                        Container(
-                                                                          padding:
-                                                                          const EdgeInsets
-                                                                              .all(8.0),
-                                                                          child: Icon(
-                                                                            Icons
-                                                                                .arrow_forward_ios,
-                                                                            color:
-                                                                            Colors.red,
-                                                                            size: 16.0,
-                                                                          ),
-                                                                          decoration: BoxDecoration(
-                                                                              color: Colors
-                                                                                  .white,
-                                                                              borderRadius:
-                                                                              BorderRadius
-                                                                                  .circular(
-                                                                                  10.0)),
-                                                                        )
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
+                                                                      ),
+                                                                    )
+                                                                  : Align(
+                                                                      alignment:
+                                                                          Alignment
+                                                                              .bottomCenter,
+                                                                      child:
+                                                                          Container(
+                                                                        width: double
+                                                                            .infinity,
+                                                                        height:
+                                                                            240,
+                                                                        child:
+                                                                            Stack(
+                                                                          children: <
+                                                                              Widget>[
+                                                                            Container(
+                                                                              width: double.infinity,
+                                                                              decoration: BoxDecoration(
+                                                                                borderRadius: BorderRadius.only(topRight: Radius.circular(16), topLeft: Radius.circular(16)),
+                                                                                color: Colors.white,
+                                                                              ),
+                                                                              margin: EdgeInsets.only(top: 50),
+                                                                              child: Column(
+                                                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                                                crossAxisAlignment: CrossAxisAlignment.center,
+                                                                                children: <Widget>[
+                                                                                  SizedBox(
+                                                                                    height: 70,
+                                                                                  ),
+                                                                                  SpinKitThreeBounce(
+                                                                                    color: Colors.redAccent,
+                                                                                    size: 50.0,
+                                                                                  ),
+                                                                                  Container(
+                                                                                    margin: EdgeInsets.only(left: 4, right: 4, top: 2),
+                                                                                    child: Text(
+                                                                                      "Requesting your ride please wait...",
+                                                                                      style: CustomTextStyle.regularTextStyle.copyWith(color: Colors.grey, fontSize: 12),
+                                                                                    ),
+                                                                                  ),
+                                                                                  SizedBox(
+                                                                                    height: 8,
+                                                                                  ),
+                                                                                  Flexible(
+                                                                                      child: Container(
+                                                                                    width: double.infinity,
+                                                                                    margin: EdgeInsets.only(top: 16),
+                                                                                    child: RaisedButton(
+                                                                                      onPressed: () {
+                                                                                        cancelRideRequest();
+                                                                                      },
+                                                                                      color: Colors.red,
+                                                                                      child: Text(
+                                                                                        "Cancel Trip",
+                                                                                        style: CustomTextStyle.mediumTextStyleWhite,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ))
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                            Align(
+                                                                              alignment: Alignment.topCenter,
+                                                                              child: Container(
+                                                                                width: 100,
+                                                                                height: 100,
+                                                                                decoration: BoxDecoration(image: DecorationImage(image: AssetImage("images/taxi.png")), borderRadius: BorderRadius.all(Radius.circular(10)), color: Colors.white),
+                                                                              ),
+                                                                            ),
+                                                                            Align(
+                                                                              alignment: Alignment.topCenter,
+                                                                              child: Container(
+                                                                                alignment: Alignment.topCenter,
+                                                                                child: Container(
+                                                                                  width: 100,
+                                                                                  margin: EdgeInsets.only(top: 70),
+                                                                                  height: 30,
+                                                                                  decoration: BoxDecoration(borderRadius: BorderRadius.only(bottomLeft: Radius.circular(10), bottomRight: Radius.circular(10)), color: Colors.black.withOpacity(0.5)),
+                                                                                  child: Row(
+                                                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                                                    children: <Widget>[
+                                                                                      Text(
+                                                                                        "4.5",
+                                                                                        style: CustomTextStyle.boldTextStyle.copyWith(color: Colors.white, fontSize: 16),
+                                                                                      ),
+                                                                                      SizedBox(
+                                                                                        width: 4,
+                                                                                      ),
+                                                                                      Icon(
+                                                                                        Icons.star,
+                                                                                        color: Colors.yellowAccent.shade700,
+                                                                                      )
+                                                                                    ],
+                                                                                  ),
+                                                                                ),
+                                                                              ),
+                                                                            )
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                    );
+                                                            },
+                                                          );
+                                                        },
+                                                        color: Colors.red,
+                                                        textColor: Colors.white,
+                                                        child: Row(
+                                                          mainAxisSize:
+                                                              MainAxisSize.min,
+                                                          children: <Widget>[
+                                                            Text(
+                                                              "Validate",
+                                                              style: TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize:
+                                                                      16.0),
+                                                            ),
+                                                            const SizedBox(
+                                                                width: 20.0),
+                                                            Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .all(8.0),
+                                                              child: Icon(
+                                                                Icons
+                                                                    .arrow_forward_ios,
+                                                                color:
+                                                                    Colors.red,
+                                                                size: 16.0,
                                                               ),
-                                                            ],
-                                                          )),
-                                                    )
-                                                  ],
-                                                ),
-                                              ),
-                                            )
-                                          ],
-                                        )),
-                                  )
-                                ],
-                              )),
-                          SafeArea(
-                            child:
-                            Align(
-                              alignment: Alignment.bottomRight,
-                              child: Padding(
-                                padding:
-                                const EdgeInsets.only(right: 10.0, bottom: 120.0),
-                                child: ClipOval(
-                                  child: Material(
-                                    color: Colors.orange.shade100, // button color
-                                    child: InkWell(
-                                      splashColor: Colors.orange, // inkwell color
-                                      child: SizedBox(
-                                        width: 56,
-                                        height: 56,
-                                        child: Icon(Icons.my_location),
-                                      ),
-                                      onTap: () {mapController.animateCamera(
-                                        CameraUpdate.newCameraPosition(
-                                          CameraPosition(
-                                            target: LatLng(
-                                              currentPosition.latitude,
-                                              currentPosition.longitude,
-                                            ),
-                                            zoom: 18.0,
-                                          ),
-                                        ),
-                                      );
-                                      },
+                                                              decoration: BoxDecoration(
+                                                                  color: Colors
+                                                                      .white,
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                              10.0)),
+                                                            )
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              )),
+                                        )
+                                      ],
                                     ),
                                   ),
+                                )
+                              ],
+                            ))
+                        :
+                    Container(
+                            padding: EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20.0),
+                                color: Colors.white),
+                            height: 280,
+                            child: Column(
+                              children: <Widget>[
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    physics: BouncingScrollPhysics(),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          height: 5,
+                                        ),
+                                        Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(rideStatus,
+                                                  textAlign: TextAlign.center,
+                                                  style: GoogleFonts.nunito(
+                                                    textStyle: TextStyle(
+                                                        color: Colors.black,
+                                                        letterSpacing: .1),
+                                                    fontSize: 20,
+                                                    fontWeight: FontWeight.w500,
+                                                  ))
+                                            ]),
+                                        Divider(
+                                          height: 40,
+                                          thickness: 2.0,
+                                        ),
+                                        Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                            children: [
+                                              Text(carDetailsDriver,
+                                                  style: GoogleFonts.nunito(
+                                                    textStyle: TextStyle(
+                                                        color: Colors.black,
+                                                        letterSpacing: .1),
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w500,
+                                                  ))
+                                            ]),
+                                        Row(children: [
+                                          Text(carNameDriver,
+                                              style: GoogleFonts.nunito(
+                                                textStyle: TextStyle(
+                                                    color: Colors.black,
+                                                    letterSpacing: .1),
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.w900,
+                                              ))
+                                        ]),
+                                        Divider(
+                                          height: 40,
+                                          thickness: 2.0,
+                                        ),
+                                        Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceEvenly,
+                                            children: [
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                      height: 55.0,
+                                                      width: 55.0,
+                                                      child: Icon(Icons.call),
+                                                      decoration: BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius.all(
+                                                                  Radius
+                                                                      .circular(
+                                                                          26.0)),
+                                                          border: Border.all(
+                                                              width: 2.0,
+                                                              color: Colors
+                                                                  .grey))),
+                                                  SizedBox(height: 10.0),
+                                                  Text("Call")
+                                                ],
+                                              ),
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                      height: 55.0,
+                                                      width: 55.0,
+                                                      child: Icon(Icons.list),
+                                                      decoration: BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius.all(
+                                                                  Radius
+                                                                      .circular(
+                                                                          26.0)),
+                                                          border: Border.all(
+                                                              width: 2.0,
+                                                              color: Colors
+                                                                  .grey))),
+                                                  SizedBox(height: 10.0),
+                                                  Text("Details")
+                                                ],
+                                              ),
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                      height: 55.0,
+                                                      width: 55.0,
+                                                      child: Icon(Icons.cancel),
+                                                      decoration: BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius.all(
+                                                                  Radius
+                                                                      .circular(
+                                                                          26.0)),
+                                                          border: Border.all(
+                                                              width: 2.0,
+                                                              color: Colors
+                                                                  .grey)),
+                                                  ),
+                                                  SizedBox(height: 10.0),
+                                                  Text("Cancel")
+                                                ],
+                                              )
+                                            ]),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              ],
+                            ))),
+              ],
+            )),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 10.0, bottom: 120.0),
+                  child: ClipOval(
+                    child: Material(
+                      color: Colors.orange.shade100, // button color
+                      child: InkWell(
+                        splashColor: Colors.orange, // inkwell color
+                        child: SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: Icon(Icons.my_location),
+                        ),
+                        onTap: () {
+                          mapController.animateCamera(
+                            CameraUpdate.newCameraPosition(
+                              CameraPosition(
+                                target: LatLng(
+                                  currentPosition.latitude,
+                                  currentPosition.longitude,
                                 ),
+                                zoom: 18.0,
                               ),
                             ),
-                          ),
-                        ]));
-              },
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-        ));
+          ],
+        ),
+      ),
+    );
   }
+
   void initGeoFireListener() {
     Geofire.initialize("availableDriver");
 
-    Geofire.queryAtLocation(currentPosition.latitude, currentPosition.longitude, 100).listen((map) {
+    Geofire.queryAtLocation(
+            currentPosition.latitude, currentPosition.longitude, 100)
+        .listen((map) {
       if (map["key"] != null) {
         var callBack = map['callBack'];
         switch (callBack) {
           case Geofire.onKeyEntered:
-            NearbyAvailableDrivers nearbyAvailableDrivers=new NearbyAvailableDrivers("", 0, 0);
+            NearbyAvailableDrivers nearbyAvailableDrivers =
+                new NearbyAvailableDrivers("", 0, 0);
             nearbyAvailableDrivers.key = map["key"];
             nearbyAvailableDrivers.latitude = map["latitude"];
             nearbyAvailableDrivers.longitude = map["longitude"];
@@ -841,7 +1335,8 @@ class _HomePageState extends State<HomePage> {
             break;
 
           case Geofire.onKeyMoved:
-            NearbyAvailableDrivers nearbyAvailableDrivers=new NearbyAvailableDrivers("", 0, 0);
+            NearbyAvailableDrivers nearbyAvailableDrivers =
+                new NearbyAvailableDrivers("", 0, 0);
             nearbyAvailableDrivers.key = map["key"];
             nearbyAvailableDrivers.latitude = map["latitude"];
             nearbyAvailableDrivers.longitude = map["longitude"];
@@ -858,40 +1353,165 @@ class _HomePageState extends State<HomePage> {
       setState(() {});
     });
   }
-  void updateAvailableDriverOnMap()
-  {
+
+  void setRideRequestPanel() {
+    setState(() {
+      rideRequestHeigth = 150;
+      rideDriverHeigth = 0.0;
+    });
+  }
+
+  void setDriverInfoPanel() {
+    setState(() {
+      rideDriverHeigth = 350.0;
+      rideRequestHeigth = 0.0;
+    });
+  }
+
+  void printFirebase() {
+    rideRequestRef =
+        FirebaseDatabase.instance.reference().child("Ride Requests");
+    rideRequestRef.once().then((DataSnapshot snapshot) {
+      print('${snapshot.value}');
+      //rideRequestKey =snapshot.key;
+    });
+  }
+
+  void saveRideRequest() async {
+    rideRequestRef =
+        FirebaseDatabase.instance.reference().child("Ride Requests");
+
+    var pickUp = Provider.of<AppData>(context, listen: false).pickUpLocation;
+    var dropOff = Provider.of<AppData>(context, listen: false).dropOffLocation;
+
+    List<Location> startPlacemark = await locationFromAddress(startAddress);
+    List<Location> destinationPlacemark =
+        await locationFromAddress(destinationAddress);
+
+    double startLatitude = startAddress == _currentAddress
+        ? currentPosition.latitude
+        : startPlacemark[0].latitude;
+
+    double startLongitude = startAddress == _currentAddress
+        ? currentPosition.longitude
+        : startPlacemark[0].longitude;
+
+    double destinationLatitude = destinationPlacemark[0].latitude;
+    double destinationLongitude = destinationPlacemark[0].longitude;
+
+    Map pickUpLocMap = {
+      "latitude": startLatitude,
+      "longitude": startLongitude,
+    };
+    Map dropOffMap = {
+      "latitude": destinationLatitude,
+      "longitude": destinationLongitude,
+    };
+    Map rideInfoMap = {
+      "driver_in": "waiting",
+      "payment_method": "cash",
+      "pickup": pickUpLocMap,
+      "drop": dropOffMap,
+      "created_at": DateTime.now().toString(),
+      "rider_name": "Cephas",
+      "rider_phone": "0639607953",
+      "pickup_address": startAddress,
+      "dropoff_address": destinationAddressController.text
+    };
+    var orderRef = rideRequestRef.push();
+    setState(() {
+      orderRef.set(rideInfoMap);
+      rideRequestKey = orderRef.key;
+      searchNearestDriver();
+      rideRequestRef.onValue.listen((event) {
+        Map data = event.snapshot.value;
+        data.forEach((index, data) => {
+              setState(() {
+                weightList.add({
+                  "carDetail": carDetailsDriver = data["car_details"].toString()
+                });
+              }),
+              if (data["driver_name"] != null)
+                {
+                  setState(() {
+                    carNameDriver = data["driver_name"].toString();
+                  })
+                },
+              if (data["driver_phone"] != null)
+                {
+                  setState(() {
+                    driverPhone = data["driver_phone"].toString();
+                  }),
+                },
+              if (data["driver_phone"] != null)
+                {
+                  setState(() {
+                    driverPhone = data["driver_phone"].toString();
+                  }),
+                },
+              if (data["status"] != null)
+                {
+                  setState(() {
+                    statusRide = data["status"];
+                  }),
+                },
+              if (data["status"] == "accepted")
+                {
+                  setState(() {
+                    Get.back();
+                    setDriverInfoPanel();
+                  }),
+                },
+            });
+      });
+    });
+  }
+
+  void updateAvailableDriverOnMap() {
     setState(() {
       markers.clear();
     });
     Set<Marker> tMarkers = Set<Marker>();
-    for(NearbyAvailableDrivers drivers in GeoFireAssistant.nearbyAvailableList){
-      LatLng driverAvailablePosition = LatLng(drivers.latitude,drivers.longitude);
+    for (NearbyAvailableDrivers drivers
+        in GeoFireAssistant.nearbyAvailableList) {
+      LatLng driverAvailablePosition =
+          LatLng(drivers.latitude, drivers.longitude);
       Marker marker = Marker(
           markerId: MarkerId("driver${drivers.key}"),
           position: driverAvailablePosition,
-          icon:nearByIcon,
-          rotation :AssistantMethods.createRadomNumber(60)
-      );
+          icon: nearByIcon,
+          rotation: AssistantMethods.createRadomNumber(60));
       tMarkers.add(marker);
       setState(() {
-        markers=tMarkers;
+        markers = tMarkers;
       });
     }
   }
-  void createIconMarker(){
-    if (nearByIcon==null){
-      ImageConfiguration imageConfiguration = createLocalImageConfiguration(context,size:Size( 2, 2));
-      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/ambulancecar.png")
-          .then((value){
+
+  void createIconMarker() {
+    if (nearByIcon == null) {
+      ImageConfiguration imageConfiguration =
+          createLocalImageConfiguration(context, size: Size(2, 2));
+      BitmapDescriptor.fromAssetImage(
+              imageConfiguration, "images/car_driving.png")
+          .then((value) {
         nearByIcon = value;
-      })
-      ;
+      });
     }
   }
-  void searchNearestDriver()
-  {
-    if (availableDriver.length==0)
-    {
+
+  void cancelRideRequest() {
+    rideRequestRef.remove();
+    setState(() {
+      state = "normal";
+      print("removed");
+      Get.back();
+      setRideRequestPanel();
+    });
+  }
+
+  void searchNearestDriver() {
+    if (availableDriver.length == 0) {
       cancelRideRequest();
       noDriverFound();
       return;
@@ -900,28 +1520,66 @@ class _HomePageState extends State<HomePage> {
     notifyDriver(driver);
     availableDriver.removeAt(0);
   }
-  void noDriverFound(){
-    showDialog(context: context, builder: (BuildContext context)=>NoDriverAvailableDialog());
-  }
-   notifyDriver(NearbyAvailableDrivers driver)
-  {
-    //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
-    //print(rideRequestRef.key);
-    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
-    driversRef.child(driver.key)
-        .child("newRide")
-        .set("-Mhus_-fhlZpB-6znEpK");
 
-    driversRef.child(driver.key)
+  void noDriverFound() {
+    showDialog(
+        context: context,
+        builder: (BuildContext context) => NoDriverAvailableDialog());
+  }
+  estimateFareAmount () async
+  {
+    var currentLatLng = LatLng(currentPosition.latitude,currentPosition.longitude);
+    var directionDetails = await AssistantMethods.obtainPlaceDirectionDetails(destinationPosition, currentLatLng);
+   print(directionDetails);
+    Get.back();
+    setState(() {
+      fareAmount = AssistantMethods.calculateFares(directionDetails);
+    });
+  }
+  notifyDriver(NearbyAvailableDrivers driver) {
+    //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    //print(FirebaseDatabase.instance.reference().child("Ride Requests"));
+    //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+
+    driversRef.child(driver.key).child("newRide").set(rideRequestKey);
+
+    driversRef
+        .child(driver.key)
         .child("token")
-        .once().then((DataSnapshot snapshot)
-      {
-        if (snapshot.value!=null)
-        {
+        .once()
+        .then((DataSnapshot snapshot) {
+      if (snapshot.value != null) {
         String token = snapshot.value.toString();
-        print( snapshot.value);
-          AssistantMethods.sendNotificationToDriver(token, context,"-Mhus_-fhlZpB-6znEpK");
+        AssistantMethods.sendNotificationToDriver(
+            token, context, rideRequestKey);
+      } else {
+        return;
+      }
+      const oneSecondPassed = Duration(seconds: 1);
+      var timer = Timer.periodic(oneSecondPassed, (timer) {
+        if (state != "requesting") {
+          driversRef.child(driver.key).child("newRide").set("cancelled");
+          driverRequestTimeOut = 40;
+          timer.cancel();
+        }
+
+        driverRequestTimeOut = driverRequestTimeOut - 1;
+        driversRef.child(driver.key).child("newRide").onValue.listen((event) {
+          if (event.snapshot.value.toString() == "accepted") {
+            driversRef.child(driver.key).child("newRide").onDisconnect();
+            driverRequestTimeOut = 40;
+            timer.cancel();
+          }
+        });
+        if (driverRequestTimeOut == 0) {
+          driversRef.child(driver.key).child("newRide").set("timeout");
+
+          driversRef.child(driver.key).child("newRide").onDisconnect();
+          driverRequestTimeOut = 40;
+          timer.cancel();
+          searchNearestDriver();
         }
       });
+    });
   }
 }

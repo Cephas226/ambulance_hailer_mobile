@@ -1,7 +1,6 @@
 import 'package:ambulance_hailer/driver/dashboard/dashboard_page.dart';
 import 'package:ambulance_hailer/pages/authentification/login.dart';
 import 'package:ambulance_hailer/pages/home/home_page.dart';
-import 'package:ambulance_hailer/pages/home/home_pagex.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 
@@ -21,12 +20,12 @@ class SplashScreenController extends GetxController {
         usersRef.child(FirebaseAuth.instance.currentUser.uid).once().then((snapshot) => {
           snapshot.value["userType"] == "Driver"
               ? Get.off(DashboardDriverPage())
-              : Get.off(MapView()),
+              : Get.off(HomePage()),
         });
         driversRef.child(FirebaseAuth.instance.currentUser.uid).once().then((snapshot) => {
           snapshot.value["userType"] == "Driver"
               ? Get.off(DashboardDriverPage())
-              : Get.off(MapView()),
+              : Get.off(HomePage()),
         });
       }
       //Get.offNamedUntil('/login', (route) => false);

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:ambulance_hailer/allWidget/noDriverAvailableDialog.dart';
@@ -29,12 +30,12 @@ import 'home_controller.dart';
 import 'package:provider/provider.dart';
 
 
-class MapView extends StatefulWidget {
+class HomePage extends StatefulWidget {
   @override
   _MapViewState createState() => _MapViewState();
 }
 
-class _MapViewState extends State<MapView> {
+class _MapViewState extends State<HomePage> {
   CameraPosition _initialLocation = CameraPosition(target: LatLng(0.0, 0.0));
   GoogleMapController mapController;
   LatLng initialPosition = LatLng(33.609434051916494, -7.623460799015407);
@@ -63,6 +64,7 @@ class _MapViewState extends State<MapView> {
   String token;
   DatabaseReference rideRequestRef;
   String rideRequestKey;
+  String state = "normal";
   Widget _textField({
      TextEditingController controller,
      FocusNode focusNode,
@@ -852,6 +854,9 @@ class _MapViewState extends State<MapView> {
                                                            builder: (context) {
                                                              return RequestTripPage();
                                                            });*/
+                                                        setState((){
+                                                          state ="requesting";
+                                                        });
                                                         saveRideRequest();
                                                         availableDriver = GeoFireAssistant.nearbyAvailableList;
                                                         showModalBottomSheet(
@@ -905,9 +910,7 @@ class _MapViewState extends State<MapView> {
                                                                                 margin: EdgeInsets.only(top: 16),
                                                                                 child: RaisedButton(
                                                                                   onPressed: () {
-                                                                                    rideRequestRef.remove();
-                                                                                    print("removed");
-                                                                                    Navigator.pop(context);
+                                                                                    cancelRideRequest();
                                                                                   },
                                                                                   color: Colors.red,
                                                                                   child: Text(
@@ -1192,6 +1195,11 @@ class _MapViewState extends State<MapView> {
   }
   void cancelRideRequest(){
     rideRequestRef.remove();
+    setState(() {
+      state = "normal";
+      print("removed");
+      Get.back();
+    });
   }
   void searchNearestDriver()
   {
@@ -1227,6 +1235,45 @@ class _MapViewState extends State<MapView> {
         String token = snapshot.value.toString();
         AssistantMethods.sendNotificationToDriver(token, context,rideRequestKey);
       }
-    });
+      else
+        {
+          return;
+        }
+      const oneSecondPassed = Duration(seconds : 1);
+      var timer = Timer.periodic(oneSecondPassed,(timer){
+
+        if (state!="requesting")
+        {
+
+        }
+
+        driverRequestTimeOut = driverRequestTimeOut-1;
+        driversRef.child(driver.key)
+            .child("newRide")
+            .onValue.listen((event) {
+          if (event.snapshot.value.toString()=="accepted")
+          {
+            driversRef.child(driver.key)
+                .child("newRide")
+                .onDisconnect();
+            driverRequestTimeOut = 40;
+            timer.cancel();
+          }
+        });
+        if (driverRequestTimeOut==0)
+        {
+          driversRef.child(driver.key)
+              .child("newRide")
+              .set("timeout");
+
+          driversRef.child(driver.key)
+              .child("newRide")
+              .onDisconnect();
+          driverRequestTimeOut = 40;
+          timer.cancel();
+          searchNearestDriver();
+        }
+    });});
   }
+
 }
