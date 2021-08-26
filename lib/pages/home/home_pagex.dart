@@ -23,6 +23,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_maps_place_picker/google_maps_place_picker.dart';
 import 'package:geolocator/geolocator.dart';
 
+//import '../../main.dart';
 import '../../main.dart';
 import 'home_controller.dart';
 import 'package:provider/provider.dart';
@@ -61,6 +62,7 @@ class _MapViewState extends State<MapView> {
   List<NearbyAvailableDrivers> availableDriver;
   String token;
   DatabaseReference rideRequestRef;
+  String rideRequestKey;
   Widget _textField({
      TextEditingController controller,
      FocusNode focusNode,
@@ -779,7 +781,7 @@ class _MapViewState extends State<MapView> {
                                       Container(
                                         padding: EdgeInsets.all(10),
                                         child: Row(children: [
-                                          Text("👋 Hello Cephas ZOUBGA",
+                                          Text("👋 Hi Cephas ZOUBGA",
                                               style: GoogleFonts.nunito(
                                                 textStyle: TextStyle(
                                                     color: Colors.black,
@@ -852,7 +854,6 @@ class _MapViewState extends State<MapView> {
                                                            });*/
                                                         saveRideRequest();
                                                         availableDriver = GeoFireAssistant.nearbyAvailableList;
-                                                        searchNearestDriver();
                                                         showModalBottomSheet(
                                                           backgroundColor: Colors.transparent,
                                                           isScrollControlled: true,
@@ -905,6 +906,7 @@ class _MapViewState extends State<MapView> {
                                                                                 child: RaisedButton(
                                                                                   onPressed: () {
                                                                                     rideRequestRef.remove();
+                                                                                    print("removed");
                                                                                     Navigator.pop(context);
                                                                                   },
                                                                                   color: Colors.red,
@@ -1067,7 +1069,7 @@ class _MapViewState extends State<MapView> {
   void initGeoFireListener() {
     Geofire.initialize("availableDriver");
 
-    Geofire.queryAtLocation(currentPosition.latitude, -7.623460799015407, 100).listen((map) {
+    Geofire.queryAtLocation(currentPosition.latitude, currentPosition.longitude, 100).listen((map) {
       if (map["key"] != null) {
         var callBack = map['callBack'];
         switch (callBack) {
@@ -1103,6 +1105,13 @@ class _MapViewState extends State<MapView> {
       setState(() {});
     });
   }
+  void printFirebase(){
+    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    rideRequestRef.once().then((DataSnapshot snapshot) {
+      print('${snapshot.value}');
+      //rideRequestKey =snapshot.key;
+    });
+  }
   void saveRideRequest() async {
     rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
 
@@ -1111,8 +1120,6 @@ class _MapViewState extends State<MapView> {
 
     List<Location> startPlacemark = await locationFromAddress(startAddress);
     List<Location> destinationPlacemark = await locationFromAddress(destinationAddress);
-
-    print(currentPosition);
 
     double startLatitude = startAddress == _currentAddress
         ? currentPosition.latitude
@@ -1144,7 +1151,14 @@ class _MapViewState extends State<MapView> {
       "pickup_address":startAddress,
       "dropoff_address":destinationAddressController.text
     };
-    rideRequestRef.push().set(rideInfoMap);
+    var orderRef =rideRequestRef
+        .push();
+   setState(() {
+     orderRef.set(rideInfoMap);
+     rideRequestKey=orderRef.key;
+     print(orderRef.key);
+     searchNearestDriver();
+   });
   }
   void updateAvailableDriverOnMap()
   {
@@ -1169,7 +1183,7 @@ class _MapViewState extends State<MapView> {
   void createIconMarker(){
     if (nearByIcon==null){
       ImageConfiguration imageConfiguration = createLocalImageConfiguration(context,size:Size( 2, 2));
-      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/ambulancecar.png")
+      BitmapDescriptor.fromAssetImage(imageConfiguration, "images/car_driving.png")
           .then((value){
         nearByIcon = value;
       })
@@ -1197,11 +1211,12 @@ class _MapViewState extends State<MapView> {
   notifyDriver(NearbyAvailableDrivers driver)
   {
     //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
-    print(rideRequestRef.key);
-    rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+    //print(FirebaseDatabase.instance.reference().child("Ride Requests"));
+    //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
+
     driversRef.child(driver.key)
         .child("newRide")
-        .set("-Mhus_-fhlZpB-6znEpK");
+        .set(rideRequestKey);
 
     driversRef.child(driver.key)
         .child("token")
@@ -1210,8 +1225,7 @@ class _MapViewState extends State<MapView> {
       if (snapshot.value!=null)
       {
         String token = snapshot.value.toString();
-        print( snapshot.value);
-        AssistantMethods.sendNotificationToDriver(token, context,"-Mhus_-fhlZpB-6znEpK");
+        AssistantMethods.sendNotificationToDriver(token, context,rideRequestKey);
       }
     });
   }

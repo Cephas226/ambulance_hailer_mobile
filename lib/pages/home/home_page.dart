@@ -906,7 +906,7 @@ class _HomePageState extends State<HomePage> {
    notifyDriver(NearbyAvailableDrivers driver)
   {
     //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
-    print(rideRequestRef.key);
+    //print(rideRequestRef.key);
     rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
     driversRef.child(driver.key)
         .child("newRide")

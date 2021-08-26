@@ -1,5 +1,6 @@
 import 'package:ambulance_hailer/assistant/assistantMethods.dart';
 import 'package:ambulance_hailer/driver/driver_screen/newRideScreen.dart';
+import 'package:ambulance_hailer/library/configMaps.dart';
 import 'package:ambulance_hailer/main.dart';
 import 'package:ambulance_hailer/models/rideDetails.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -76,8 +77,9 @@ class NotificationDialog extends StatelessWidget{
                            padding: EdgeInsets.all(8.0),
                            child: Text("Cancel".toUpperCase(),style: TextStyle(fontSize: 14.0))),
                       SizedBox(height:8),
-                      RaisedButton(onPressed:()=>{
-                        checkAvailabilityChek(),
+                      RaisedButton(
+                          onPressed:()=>{
+                        checkAvailabilityChek(context),
                       }, shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(18.0),
                           side: BorderSide(color:Colors.green)),
@@ -95,9 +97,9 @@ class NotificationDialog extends StatelessWidget{
       ),
     );
   }
-  void checkAvailabilityChek(){
+  void checkAvailabilityChek(context){
 
-    rideRequestRef.once().then((DataSnapshot dataSnapshot){
+    myrideRequestRef.once().then((DataSnapshot dataSnapshot){
      Get.back();
       String theRideId = "";
       if (dataSnapshot.value !=null){
@@ -107,9 +109,10 @@ class NotificationDialog extends StatelessWidget{
         print("Ride not exist");
       }
       if(theRideId == rideDetails.ride_request_id){
-          rideRequestRef.set("accepted");
-          AssistantMethods.disableHomeDriveLiveLocationUpdates();
-          Get.to(NewRidePage(rideDetails: rideDetails));
+        FirebaseDatabase.instance.reference().child("drivers").child(currentfirebaseDriver.uid).child("newRide").set("accepted");
+        AssistantMethods.disableHomeDriveLiveLocationUpdates();
+      //Get.to(NewRidePage(rideDetails: rideDetails));
+        Navigator.push(context, new MaterialPageRoute(builder: (context)=>NewRidePage(rideDetails: rideDetails)));
       }
       else if (theRideId == "canceled"){
         print("Ride has been cancelled");

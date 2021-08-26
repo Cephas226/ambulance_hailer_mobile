@@ -266,8 +266,8 @@ class _HomeDriverPageState extends State<HomeDriverPage> {
     print(currentfirebaseDriver.uid);
 
    Geofire.setLocation( currentfirebaseDriver.uid,position.latitude, position.longitude);
-   rideRequestRef.set("searching");
-   rideRequestRef.onValue.listen((event) {
+ myrideRequestRef.set("searching");
+ myrideRequestRef.onValue.listen((event) {
     });
   }
   void getLocationLiveUpdates(){

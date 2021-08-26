@@ -26,7 +26,7 @@ class HomeDriverController extends GetxController {
   }
 
   void cancelRideRequest(){
-    rideRequestRef.remove();
+    myrideRequestRef.remove();
   }
 
 }
