@@ -73,6 +73,7 @@ class _HomePageState extends State<HomePage> {
   double driverLat;
   double driverLng;
   LatLng driverCurrentLocation;
+  var details;
   Widget _textField({
     TextEditingController controller,
     FocusNode focusNode,
@@ -1435,7 +1436,7 @@ class _HomePageState extends State<HomePage> {
                 statusRide = data["status"];
               }),
             },
-          if (data["status"] == "accepted")
+          if (statusRide == "accepted")
             {
               setState(() {
                 Get.back();
@@ -1463,15 +1464,15 @@ class _HomePageState extends State<HomePage> {
                   driverLng = double.parse(
                       data["driver_location"]["longitude"].toString()),
                   driverCurrentLocation = LatLng(driverLat, driverLng),
-                  if (data["status"] == "accepted")
+                  if (statusRide == "accepted")
                     {
                       updateRideTimeToPickUpLoc(driverCurrentLocation),
                     }
-                  else if (data["status"] == "accepted")
+                  else if (data["status"] == "onride")
                     {
                       updateRideTimeToDropOffLoc(driverCurrentLocation),
                     }
-                  else if (data["status"] == "accepted")
+                  else if (data["status"] == "arrived")
                     {
                       setState(() {
                         rideStatus = "Driver has Arrived";
@@ -1490,17 +1491,19 @@ class _HomePageState extends State<HomePage> {
     });
   }
   void updateRideTimeToPickUpLoc(LatLng driverCurrentLocation) async {
+    print("---MAIS MINCE MONTRE TOI ");
     var positionUserLatLng =
         LatLng(currentPosition.latitude, currentPosition.longitude);
     var details = await AssistantMethods.obtainPlaceDirectionDetails(
         driverCurrentLocation, positionUserLatLng);
+
     if (isRequestingpositionDetails == false) {
       isRequestingpositionDetails = true;
-      if (details = null) {
+      if (details == null) {
         return;
       }
       setState(() {
-        rideStatus = "Driver is coming - " + details.durationText;
+        rideStatus = "Driver is comming - " + details.durationText;
       });
       isRequestingpositionDetails = false;
     }
@@ -1511,7 +1514,7 @@ class _HomePageState extends State<HomePage> {
         driverCurrentLocation, destinationPosition);
     if (isRequestingpositionDetails == false) {
       isRequestingpositionDetails = true;
-      if (details = null) {
+      if (details == null) {
         return;
       }
       setState(() {
@@ -1519,6 +1522,7 @@ class _HomePageState extends State<HomePage> {
       });
       isRequestingpositionDetails = false;
     }
+    print('rideStatus'+rideStatus);
   }
 
   void updateAvailableDriverOnMap() {
