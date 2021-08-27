@@ -51,7 +51,7 @@ class _HomePageState extends State<HomePage> {
   String startAddress = '';
   String destinationAddress = '';
   String placeDistance;
-  int fareAmount =0;
+  int fareAmount = 0;
   Set<Marker> markers = {};
 
   PolylinePoints polylinePoints;
@@ -69,7 +69,10 @@ class _HomePageState extends State<HomePage> {
   double rideRequestHeigth;
   double rideDriverHeigth;
   String carDetailsDriverx;
-  List weightList = [];
+  bool isRequestingpositionDetails = false;
+  double driverLat;
+  double driverLng;
+  LatLng driverCurrentLocation;
   Widget _textField({
     TextEditingController controller,
     FocusNode focusNode,
@@ -183,7 +186,8 @@ class _HomePageState extends State<HomePage> {
       double destinationLatitude = destinationPlacemark[0].latitude;
       double destinationLongitude = destinationPlacemark[0].longitude;
 
-      destinationPosition =LatLng(destinationPlacemark[0].latitude, destinationPlacemark[0].longitude);
+      destinationPosition = LatLng(
+          destinationPlacemark[0].latitude, destinationPlacemark[0].longitude);
 
       String startCoordinatesString = '($startLatitude, $startLongitude)';
       String destinationCoordinatesString =
@@ -821,7 +825,8 @@ class _HomePageState extends State<HomePage> {
                                                   Row(
                                                     children: <Widget>[
                                                       Text(
-                                                        "Price :" + " \₵$fareAmount",
+                                                        "Price :" +
+                                                            " \₵$fareAmount",
                                                         style: TextStyle(
                                                             color: Colors.white,
                                                             fontWeight:
@@ -1127,8 +1132,7 @@ class _HomePageState extends State<HomePage> {
                                 )
                               ],
                             ))
-                        :
-                    Container(
+                        : Container(
                             padding: EdgeInsets.all(20),
                             decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(20.0),
@@ -1243,19 +1247,18 @@ class _HomePageState extends State<HomePage> {
                                                     CrossAxisAlignment.start,
                                                 children: [
                                                   Container(
-                                                      height: 55.0,
-                                                      width: 55.0,
-                                                      child: Icon(Icons.cancel),
-                                                      decoration: BoxDecoration(
-                                                          borderRadius:
-                                                              BorderRadius.all(
-                                                                  Radius
-                                                                      .circular(
-                                                                          26.0)),
-                                                          border: Border.all(
-                                                              width: 2.0,
-                                                              color: Colors
-                                                                  .grey)),
+                                                    height: 55.0,
+                                                    width: 55.0,
+                                                    child: Icon(Icons.cancel),
+                                                    decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius.all(
+                                                                Radius.circular(
+                                                                    26.0)),
+                                                        border: Border.all(
+                                                            width: 2.0,
+                                                            color:
+                                                                Colors.grey)),
                                                   ),
                                                   SizedBox(height: 10.0),
                                                   Text("Cancel")
@@ -1426,11 +1429,6 @@ class _HomePageState extends State<HomePage> {
       rideRequestRef.onValue.listen((event) {
         Map data = event.snapshot.value;
         data.forEach((index, data) => {
-              setState(() {
-                weightList.add({
-                  "carDetail": carDetailsDriver = data["car_details"].toString()
-                });
-              }),
               if (data["driver_name"] != null)
                 {
                   setState(() {
@@ -1443,11 +1441,27 @@ class _HomePageState extends State<HomePage> {
                     driverPhone = data["driver_phone"].toString();
                   }),
                 },
-              if (data["driver_phone"] != null)
+              if (data["driver_location"] != null)
                 {
-                  setState(() {
-                    driverPhone = data["driver_phone"].toString();
-                  }),
+                  driverLat = double.parse(
+                      data["driver_location"]["latitude"].toString()),
+                  driverLng = double.parse(
+                      data["driver_location"]["longitude"].toString()),
+                  driverCurrentLocation = LatLng(driverLat, driverLng),
+                  if (statusRide == "accepted")
+                    {
+                      updateRideTimeToPickUpLoc(driverCurrentLocation),
+                    }
+                  else if (statusRide == "onride")
+                    {
+                      updateRideTimeToDropOffLoc(driverCurrentLocation),
+                    }
+                  else if (statusRide == "arrived")
+                    {
+                      setState(() {
+                        rideStatus = "Driver has Arrived";
+                      })
+                    }
                 },
               if (data["status"] != null)
                 {
@@ -1460,11 +1474,50 @@ class _HomePageState extends State<HomePage> {
                   setState(() {
                     Get.back();
                     setDriverInfoPanel();
+                    Geofire.stopListener();
+                    deleteGeoFireMakers();
                   }),
                 },
             });
       });
     });
+  }
+  void deleteGeoFireMakers()
+  {
+    setState(() {
+      markers.removeWhere((element) => element.markerId.value.contains("driver"));
+    });
+  }
+  void updateRideTimeToPickUpLoc(LatLng driverCurrentLocation) async {
+    var positionUserLatLng =
+        LatLng(currentPosition.latitude, currentPosition.longitude);
+    var details = await AssistantMethods.obtainPlaceDirectionDetails(
+        driverCurrentLocation, positionUserLatLng);
+    if (isRequestingpositionDetails == false) {
+      isRequestingpositionDetails = true;
+      if (details = null) {
+        return;
+      }
+      setState(() {
+        rideStatus = "Driver is coming - " + details.durationText;
+      });
+      isRequestingpositionDetails = false;
+    }
+  }
+
+  void updateRideTimeToDropOffLoc(LatLng driverCurrentLocation) async {
+    var details = await AssistantMethods.obtainPlaceDirectionDetails(
+        driverCurrentLocation, destinationPosition);
+    if (isRequestingpositionDetails == false) {
+      isRequestingpositionDetails = true;
+      if (details = null) {
+        return;
+      }
+      setState(() {
+        rideStatus = "Going to Destination - " + details.durationText;
+      });
+      isRequestingpositionDetails = false;
+    }
   }
 
   void updateAvailableDriverOnMap() {
@@ -1526,16 +1579,19 @@ class _HomePageState extends State<HomePage> {
         context: context,
         builder: (BuildContext context) => NoDriverAvailableDialog());
   }
-  estimateFareAmount () async
-  {
-    var currentLatLng = LatLng(currentPosition.latitude,currentPosition.longitude);
-    var directionDetails = await AssistantMethods.obtainPlaceDirectionDetails(destinationPosition, currentLatLng);
-   print(directionDetails);
+
+  estimateFareAmount() async {
+    var currentLatLng =
+        LatLng(currentPosition.latitude, currentPosition.longitude);
+    var directionDetails = await AssistantMethods.obtainPlaceDirectionDetails(
+        destinationPosition, currentLatLng);
+    print(directionDetails);
     Get.back();
     setState(() {
       fareAmount = AssistantMethods.calculateFares(directionDetails);
     });
   }
+
   notifyDriver(NearbyAvailableDrivers driver) {
     //rideRequestRef =FirebaseDatabase.instance.reference().child("Ride Requests");
     //print(FirebaseDatabase.instance.reference().child("Ride Requests"));
