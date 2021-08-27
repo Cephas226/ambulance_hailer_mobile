@@ -1429,6 +1429,21 @@ class _HomePageState extends State<HomePage> {
       rideRequestRef.onValue.listen((event) {
         Map data = event.snapshot.value;
         data.forEach((index, data) => {
+          if (data["status"] != null)
+            {
+              setState(() {
+                statusRide = data["status"];
+              }),
+            },
+          if (data["status"] == "accepted")
+            {
+              setState(() {
+                Get.back();
+                setDriverInfoPanel();
+                Geofire.stopListener();
+                deleteGeoFireMakers();
+              }),
+            },
               if (data["driver_name"] != null)
                 {
                   setState(() {
@@ -1448,36 +1463,22 @@ class _HomePageState extends State<HomePage> {
                   driverLng = double.parse(
                       data["driver_location"]["longitude"].toString()),
                   driverCurrentLocation = LatLng(driverLat, driverLng),
-                  if (statusRide == "accepted")
+                  if (data["status"] == "accepted")
                     {
                       updateRideTimeToPickUpLoc(driverCurrentLocation),
                     }
-                  else if (statusRide == "onride")
+                  else if (data["status"] == "accepted")
                     {
                       updateRideTimeToDropOffLoc(driverCurrentLocation),
                     }
-                  else if (statusRide == "arrived")
+                  else if (data["status"] == "accepted")
                     {
                       setState(() {
                         rideStatus = "Driver has Arrived";
                       })
                     }
                 },
-              if (data["status"] != null)
-                {
-                  setState(() {
-                    statusRide = data["status"];
-                  }),
-                },
-              if (data["status"] == "accepted")
-                {
-                  setState(() {
-                    Get.back();
-                    setDriverInfoPanel();
-                    Geofire.stopListener();
-                    deleteGeoFireMakers();
-                  }),
-                },
+
             });
       });
     });
